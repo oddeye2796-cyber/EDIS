@@ -25,6 +25,7 @@ export const perms = {
   "master.sync": ["staff", "office_admin"],
   "alias.edit": ["staff", "office_admin"],
   "mail.check": ["staff", "office_admin"],
+  "ecount.view": ["staff", "office_admin"],
 } satisfies Record<string, Role[]>;
 
 export type Perm = keyof typeof perms;

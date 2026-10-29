@@ -1,10 +1,10 @@
 import { query } from "@/lib/db";
-import { requireUser } from "@/lib/auth";
+import { requirePermPage } from "@/lib/permissions";
 import { dateTime } from "@/lib/labels";
 import { isMock } from "@/lib/ecount";
 
 export default async function EcountPage() {
-  await requireUser();
+  await requirePermPage("ecount.view");
   const logs = await query(
     `select e.*, coalesce(po.po_no, so.so_no) as doc_no from ecount_sync_logs e
        left join purchase_orders po on e.doc_type = 'po' and po.id = e.doc_id

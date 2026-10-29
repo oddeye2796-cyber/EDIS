@@ -4,7 +4,8 @@ import { requireUser } from "@/lib/auth";
 import { channelLabel, date, dateTime } from "@/lib/labels";
 import StatusBadge, { DueBadge } from "@/components/StatusBadge";
 import { redirect } from "next/navigation";
-import FlowSteps from "@/components/FlowSteps";
+import FlowSteps, { type StepLink } from "@/components/FlowSteps";
+import { can, whoCan, type Perm } from "@/lib/permissions";
 import { poSteps, soSteps } from "@/lib/flow";
 
 export default async function Dashboard() {
@@ -64,8 +65,19 @@ export default async function Dashboard() {
   const poCounts = [0, 0, sc?.po_inbox ?? 0, sc?.po_approve ?? 0, sc?.po_factory ?? 0, sc?.po_send ?? 0, sc?.po_receive ?? 0, 0];
   const soCounts = [0, 0, sc?.so_inbox ?? 0, sc?.so_confirm ?? 0, sc?.so_prepare ?? 0, sc?.so_ship ?? 0, 0];
 
+  // 단계 칩을 누르면 그 단계에 머문 건을 모아 보는 화면으로 갑니다. 그 화면을 볼 권한이 없으면 누를 수 없습니다.
+  const step = (href: string, perm?: Perm): StepLink =>
+    !perm || can(user.role, perm) ? { href } : { note: `${whoCan(perm)}만 볼 수 있는 화면입니다.` };
+  const soInbox = step("/inbox?dir=sales", "inbox.manage");
+  const poInbox = step("/inbox?dir=purchase", "inbox.manage");
+  const ecount = step("/ecount", "ecount.view");
+  const soLinks = [soInbox, soInbox, soInbox, step("/sales?status=received"), step("/sales?status=confirmed"),
+    step("/sales?status=preparing,partially_shipped"), ecount];
+  const poLinks = [poInbox, poInbox, poInbox, step("/purchase?status=pending_approval"), step("/purchase?status=approved"),
+    step("/purchase?status=confirmed"), step("/purchase?status=sent,partially_received"), ecount];
+
   const stats: [string, number, string][] = [
-    ["처리 전 주문", c?.inbox ?? 0, "/inbox"],
+    ["처리 전 주문", c?.inbox ?? 0, can(user.role, "inbox.manage") ? "/inbox" : ""],
     ["오피스 승인 대기", c?.pending ?? 0, "/purchase?status=pending_approval"],
     ["공장 확인 대기", c?.factory ?? 0, "/purchase?status=approved"],
     ["입고 예정 발주", c?.incoming ?? 0, "/purchase?status=sent,partially_received"],
@@ -77,19 +89,26 @@ export default async function Dashboard() {
     <>
       <h1 style={{ marginBottom: 16 }}>대시보드</h1>
       <div className="panel">
-        <p className="muted" style={{ marginTop: 0 }}>주황색 숫자는 지금 그 단계에 머물러 있는 건수입니다.</p>
+        <p className="muted" style={{ marginTop: 0 }}>주황색 숫자는 지금 그 단계에 머물러 있는 건수입니다. 단계를 누르면 해당 목록으로 이동합니다.</p>
         <div style={{ marginBottom: 8 }}><b>수주 (고객 주문)</b></div>
-        <FlowSteps flow={{ steps: soSteps, current: -1, tone: "active" }} counts={soCounts} />
+        <FlowSteps flow={{ steps: soSteps, current: -1, tone: "active" }} counts={soCounts} links={soLinks} />
         <div style={{ margin: "16px 0 8px" }}><b>발주 (원부재료 구매)</b></div>
-        <FlowSteps flow={{ steps: poSteps, current: -1, tone: "active" }} counts={poCounts} />
+        <FlowSteps flow={{ steps: poSteps, current: -1, tone: "active" }} counts={poCounts} links={poLinks} />
       </div>
       <div className="grid" style={{ marginBottom: 16 }}>
-        {stats.map(([l, n, href]) => (
-          <Link key={l} href={href} className="stat" style={{ color: "inherit" }}>
-            <div className="n">{n}</div>
-            <div className="l">{l}</div>
-          </Link>
-        ))}
+        {stats.map(([l, n, href]) =>
+          href ? (
+            <Link key={l} href={href} className="stat" style={{ color: "inherit" }}>
+              <div className="n">{n}</div>
+              <div className="l">{l}</div>
+            </Link>
+          ) : (
+            <div key={l} className="stat">
+              <div className="n">{n}</div>
+              <div className="l">{l}</div>
+            </div>
+          ),
+        )}
       </div>
       <div className="grid2">
         {mine[user.role] && (
