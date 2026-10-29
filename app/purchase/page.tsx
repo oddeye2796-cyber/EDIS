@@ -1,0 +1,42 @@
+import Link from "next/link";
+import { query } from "@/lib/db";
+import { requireUser } from "@/lib/auth";
+import { date, won } from "@/lib/labels";
+import StatusBadge, { DueBadge } from "@/components/StatusBadge";
+
+export default async function PurchaseList() {
+  await requireUser();
+  const rows = await query(
+    `select po.*, p.name as supplier,
+            (select coalesce(sum(qty * unit_price),0) from purchase_order_lines where po_id = po.id) as total
+       from purchase_orders po join partners p on p.id = po.supplier_id
+      order by po.created_at desc`,
+  );
+  return (
+    <>
+      <div className="topbar">
+        <h1>발주 (매입)</h1>
+        <Link className="btn" href="/purchase/new">발주서 작성</Link>
+      </div>
+      <div className="panel">
+        <table>
+          <thead><tr><th>발주번호</th><th>공급사</th><th>발주일</th><th>납기</th><th className="num">금액</th><th>상태</th><th>이카운트</th></tr></thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr key={String(r.id)}>
+                <td><Link href={`/purchase/${r.id}`}>{String(r.po_no)}</Link></td>
+                <td>{String(r.supplier)}</td>
+                <td>{date(r.order_date)}</td>
+                <td>{date(r.due_date)} <DueBadge due={r.due_date} done={["received", "cancelled", "rejected"].includes(String(r.status))} /></td>
+                <td className="num">{won(r.total)}</td>
+                <td><StatusBadge kind="po" status={String(r.status)} /></td>
+                <td>{String(r.ecount_slip_no ?? "-")}</td>
+              </tr>
+            ))}
+            {rows.length === 0 && <tr><td colSpan={7} className="muted">발주서가 없습니다.</td></tr>}
+          </tbody>
+        </table>
+      </div>
+    </>
+  );
+}
