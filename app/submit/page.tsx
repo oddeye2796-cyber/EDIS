@@ -8,6 +8,8 @@ import { draftInbox } from "@/lib/inbox";
 import type { Draft } from "@/lib/extract";
 import FlowSteps from "@/components/FlowSteps";
 import { inboxFlow, poFlow, soFlow } from "@/lib/flow";
+import { contractRemaining } from "@/lib/stock";
+import { shipFromOrder } from "../sales/actions";
 
 const MAX_IMAGE = 5 * 1024 * 1024;
 
@@ -79,10 +81,10 @@ async function shipRequest(formData: FormData) {
 export default async function SubmitPage({
   searchParams,
 }: {
-  searchParams: Promise<{ done?: string; mode?: string; sent?: string; copy?: string }>;
+  searchParams: Promise<{ done?: string; mode?: string; sent?: string; copy?: string; from?: string }>;
 }) {
   const user = await requireUser();
-  const { done, mode, sent, copy } = await searchParams;
+  const { done, mode, sent, copy, from } = await searchParams;
   const ship = mode === "ship";
   const partners = await query<{ id: number; name: string }>("select id, name from partners order by name");
   const customers = await query<{ id: number; name: string }>(
@@ -99,8 +101,25 @@ export default async function SubmitPage({
   const baseLines = base
     ? await query<{ item_id: number; qty: string }>("select item_id, qty from sales_order_lines where so_id = $1 order by id", [Number(copy)])
     : [];
+  // 나눠 보낼 수 있는 기존 수주(계약): 진행 중이고 남은 수량이 있는 것
+  const contracts = ship
+    ? await query<{ id: number; so_no: string; customer: string; due_date: Date | null; memo: string | null; summary: string }>(
+        `select s.id, s.so_no, p.name as customer, s.due_date, s.memo,
+                string_agg(i.name || ' ' || trim_scale(r.remaining)::text || i.unit, ', ' order by l.id) as summary
+           from sales_orders s join partners p on p.id = s.customer_id
+           join sales_order_lines l on l.so_id = s.id join items i on i.id = l.item_id
+           cross join lateral (select l.qty - l.shipped_qty - coalesce((
+                 select sum(cl.qty - cl.shipped_qty) from sales_order_lines cl join sales_orders c on c.id = cl.so_id
+                  where c.parent_so_id = s.id and cl.item_id = l.item_id and c.status <> 'cancelled'), 0) as remaining) r
+          where s.kind = 'order' and s.status in ('received','confirmed','preparing','partially_shipped') and r.remaining > 0
+          group by s.id, p.name order by s.due_date nulls last`,
+      )
+    : [];
+  const parent = from ? contracts.find((c) => c.id === Number(from)) : undefined;
+  const parentLines = parent ? (await contractRemaining(parent.id)).filter((l) => Number(l.remaining) > 0) : [];
   const myShips = await query(
     `select so.id, so.so_no, so.status, so.urgent, so.created_at, so.due_date, so.ecount_slip_no, p.name as customer,
+            (select so_no from sales_orders where id = so.parent_so_id) as parent_no,
             (select string_agg(i.name || ' ' || trim_scale(l.qty)::text || i.unit, ', ' order by l.id)
                from sales_order_lines l join items i on i.id = l.item_id where l.so_id = so.id) as summary
        from sales_orders so join partners p on p.id = so.customer_id
@@ -135,8 +154,47 @@ export default async function SubmitPage({
           <b>출하 지시 {sent}가 등록되었습니다.</b> 아래에서 진행 상황을 볼 수 있어요.
         </div>
       )}
-      {ship && (
+      {ship && parent && (
+        <form action={shipFromOrder} className="panel">
+          <input type="hidden" name="parent_id" value={parent.id} />
+          <label>기존 수주에서 나눠 보내기</label>
+          <div><b>{parent.so_no}</b> {parent.customer}{parent.memo ? ` · ${parent.memo}` : ""}</div>
+          <table style={{ marginTop: 8 }}>
+            <thead><tr><th>품목</th><th className="num">남은 수량</th><th>이번에 보낼 수량</th></tr></thead>
+            <tbody>
+              {parentLines.map((l) => (
+                <tr key={l.line_id}>
+                  <td>{l.name}<input type="hidden" name="item_id" value={l.item_id} /></td>
+                  <td className="num">{Number(l.remaining).toLocaleString("ko-KR")} {l.unit}</td>
+                  <td><input name="qty" type="number" step="0.001" min="0" max={Number(l.remaining)} inputMode="decimal" style={{ fontSize: 16 }} /></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <div className="fields" style={{ marginTop: 12 }}>
+            <div><label>납품일</label><input type="date" name="due_date" required style={{ fontSize: 16 }} /></div>
+            <div><label>메모</label><input name="memo" placeholder="예) 11월 2차분" style={{ fontSize: 16 }} /></div>
+          </div>
+          <label className="chip" style={{ marginTop: 8 }}><input type="checkbox" name="urgent" /> 긴급</label>
+          <button className="block" style={{ marginTop: 16 }}>출하 지시 보내기</button>
+          <p className="muted" style={{ fontSize: 12, marginBottom: 0 }}>보낸 수량만큼 원 수주의 남은 수량에서 빠집니다. <Link href="/submit?mode=ship">다른 수주 고르기</Link></p>
+        </form>
+      )}
+      {ship && !parent && contracts.length > 0 && (
+        <div className="panel">
+          <label>기존 수주에서 나눠 보내기</label>
+          <p className="muted" style={{ marginTop: 0, fontSize: 13 }}>계약해 둔 물량을 나눠 내보낼 때 고르세요. 새 주문이면 아래 칸을 쓰세요.</p>
+          {contracts.map((c) => (
+            <Link key={c.id} href={`/submit?mode=ship&from=${c.id}`} className="contract-row">
+              <b>{c.so_no}</b> {c.customer}{c.memo ? ` · ${c.memo}` : ""}
+              <div className="muted" style={{ fontSize: 13 }}>남은 수량: {c.summary}</div>
+            </Link>
+          ))}
+        </div>
+      )}
+      {ship && !parent && (
         <form action={shipRequest} className="panel">
+          <label style={{ fontWeight: 600 }}>새 주문으로 출하 지시</label>
           <label>납품할 거래처</label>
           <select name="customer_id" required defaultValue={base?.customer_id ?? ""} style={{ fontSize: 16 }}>
             <option value="" disabled>선택</option>
@@ -171,6 +229,7 @@ export default async function SubmitPage({
                   <span className="muted" style={{ fontSize: 12 }}>{dateTime(m.created_at)}</span>
                 </div>
                 <div style={{ marginTop: 8 }}>{String(m.customer)} · {String(m.summary ?? "")}</div>
+                {m.parent_no ? <div className="muted" style={{ fontSize: 12 }}>{String(m.parent_no)}에서 분할</div> : null}
                 <div style={{ marginTop: 8 }}>
                   <FlowSteps compact flow={soFlow(String(m.status), false, m.ecount_slip_no as string | null)} />
                 </div>

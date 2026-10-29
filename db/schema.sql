@@ -183,3 +183,10 @@ alter table purchase_orders add column if not exists sent_to text;
 alter table sales_orders add column if not exists kind text not null default 'order';
 alter table sales_orders add column if not exists urgent boolean not null default false;
 alter table purchase_orders add column if not exists urgent boolean not null default false;
+
+-- 완제품(휴럼 제품) 품목: 수주·출하용
+alter table items drop constraint if exists items_category_check;
+alter table items add constraint items_category_check check (category in ('raw','sub','product'));
+
+-- 출하 지시를 기존 수주(계약)에 연결: 원 수주의 남은 수량에서 나눠 내보냅니다.
+alter table sales_orders add column if not exists parent_so_id int references sales_orders(id);

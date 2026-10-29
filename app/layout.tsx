@@ -5,7 +5,7 @@ import { currentUser, roleLabel } from "@/lib/auth";
 import { one } from "@/lib/db";
 import { logout } from "./actions";
 
-export const metadata: Metadata = { title: "EDIS 수발주", description: "수발주 업무 자동화 데모" };
+export const metadata: Metadata = { title: "휴럼 EDIS 수발주", description: "수발주 업무 자동화 데모" };
 export const viewport: Viewport = { width: "device-width", initialScale: 1 };
 export const dynamic = "force-dynamic";
 
@@ -24,7 +24,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           <div className="shell">
             <nav className="side">
               <div className="brand">
-                EDIS<small>수발주 업무 자동화</small>
+                휴럼 EDIS<small>수발주 업무 자동화 (데모)</small>
               </div>
               <div className="links">
                 {user.role === "sales" ? (

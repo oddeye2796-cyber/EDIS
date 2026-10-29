@@ -130,3 +130,5 @@ a.chip { text-decoration: none; }
 .ship-line { display: grid; grid-template-columns: 1fr 110px; gap: 8px; margin-bottom: 8px; }
 .bar { height: 8px; background: var(--accent); border-radius: 4px; opacity: .75; }
 button.link { background: none; border: none; color: inherit; padding: 0 2px; cursor: pointer; font-size: 13px; }
+.contract-row { display: block; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; margin-top: 8px; color: var(--text); text-decoration: none; }
+.contract-row:hover { border-color: var(--accent); }

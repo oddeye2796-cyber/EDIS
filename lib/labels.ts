@@ -32,7 +32,7 @@ export const partnerType: Record<string, string> = {
   both: "매입·매출",
 };
 
-export const itemCategory: Record<string, string> = { raw: "원료", sub: "부재료" };
+export const itemCategory: Record<string, string> = { raw: "원료", sub: "부재료", product: "완제품" };
 
 export function won(n: unknown) {
   return `${Number(n ?? 0).toLocaleString("ko-KR")}원`;

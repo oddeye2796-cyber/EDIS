@@ -85,7 +85,7 @@ export default async function ItemsPage() {
           <div className="fields">
             <div><label>품목코드</label><input name="code" required /></div>
             <div><label>품목명</label><input name="name" required /></div>
-            <div><label>구분</label><select name="category"><option value="raw">원료</option><option value="sub">부재료</option></select></div>
+            <div><label>구분</label><select name="category"><option value="raw">원료</option><option value="sub">부재료</option><option value="product">완제품</option></select></div>
             <div><label>규격</label><input name="spec" /></div>
             <div><label>단위</label><input name="unit" defaultValue="kg" /></div>
             <div><label>보관조건</label><input name="storage_condition" /></div>

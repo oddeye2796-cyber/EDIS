@@ -6,7 +6,7 @@ import { logStatus, nextDocNo, notify } from "./workflow";
 export type StockRow = {
   item_id: number;
   on_hand: number; // 유효 로트 잔량
-  reserved: number; // 다른 확정 수주가 잡아둔 수량
+  reserved: number; // 다른 확정 수주가 잡아둔 수량 (분할 출하 지시로 넘어간 몫은 출하 지시 쪽에서 셉니다)
   incoming: number; // 진행 중 발주의 미입고 수량
 };
 
@@ -16,7 +16,10 @@ export async function stockFor(itemIds: number[], excludeSoId?: number): Promise
             coalesce((select sum(remaining_qty) from lots
                        where item_id = i.id and remaining_qty > 0
                          and (expiry_date is null or expiry_date >= current_date)), 0) as on_hand,
-            coalesce((select sum(l.qty - l.shipped_qty) from sales_order_lines l join sales_orders s on s.id = l.so_id
+            coalesce((select sum(greatest(l.qty - l.shipped_qty - coalesce((
+                               select sum(cl.qty - cl.shipped_qty) from sales_order_lines cl join sales_orders c on c.id = cl.so_id
+                                where c.parent_so_id = s.id and cl.item_id = l.item_id and c.status <> 'cancelled'), 0), 0))
+                        from sales_order_lines l join sales_orders s on s.id = l.so_id
                        where l.item_id = i.id and s.status in ('confirmed','preparing','partially_shipped')
                          and s.id <> coalesce($2, 0)), 0) as reserved,
             coalesce((select sum(l.qty - l.received_qty) from purchase_order_lines l join purchase_orders p on p.id = l.po_id
@@ -113,4 +116,16 @@ export async function learnAliases(c: PoolClient, lines: { itemId: number; draft
       [l.itemId, alias],
     );
   }
+}
+
+// 원 수주(계약) 품목별 남은 수량 = 수주 수량 − 출고 수량 − 아직 출고 안 된 분할 출하 지시 수량
+export async function contractRemaining(parentId: number) {
+  return query<{ line_id: number; item_id: number; name: string; unit: string; qty: string; remaining: string; unit_price: string }>(
+    `select l.id as line_id, l.item_id, i.name, i.unit, l.qty, l.unit_price,
+            l.qty - l.shipped_qty - coalesce((
+              select sum(cl.qty - cl.shipped_qty) from sales_order_lines cl join sales_orders c on c.id = cl.so_id
+               where c.parent_so_id = l.so_id and cl.item_id = l.item_id and c.status <> 'cancelled'), 0) as remaining
+       from sales_order_lines l join items i on i.id = l.item_id where l.so_id = $1 order by l.id`,
+    [parentId],
+  );
 }
