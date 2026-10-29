@@ -1,4 +1,10 @@
-import type { Draft } from "@/lib/extract";
+import { confLabel, type Conf, type Draft } from "@/lib/extract";
+
+function ConfBadge({ conf }: { conf?: Conf }) {
+  if (!conf) return null;
+  const cls = conf === "sure" ? "ok" : conf === "guess" ? "warn" : "bad";
+  return <span className={`badge ${cls}`} style={{ marginLeft: 6 }}>{confLabel[conf]}</span>;
+}
 
 type Option = { id: number; name: string };
 type Item = { id: number; code: string; name: string; unit: string; default_price: string };
@@ -25,7 +31,9 @@ export default function OrderForm({
   submitLabel: string;
   draft?: Draft | null;
 }) {
-  const lines = draft?.lines.filter((l) => l.item_id) ?? [];
+  const lines = draft?.lines ?? [];
+  const prefill = lines.length > 0 ? Math.max(5, lines.length) : 5;
+  const showText = lines.some((l) => l.conf);
   return (
     <form action={action}>
       {inboxId && (
@@ -35,34 +43,43 @@ export default function OrderForm({
           {draft && (
             <div style={{ marginTop: 8 }}>
               <label>AI 정리 ({draft.engine === "claude" ? "Claude" : "규칙 기반"})</label>
+              {draft.urgent && <div><span className="badge bad">긴급</span> {draft.urgent_reason}</div>}
               <div>{draft.summary}</div>
               {draft.needs_check.length > 0 && (
                 <ul style={{ margin: "4px 0 0", paddingLeft: 16, color: "var(--warn)" }}>
                   {draft.needs_check.map((n, i) => <li key={i}>{n}</li>)}
                 </ul>
               )}
-              <p className="muted" style={{ marginBottom: 0 }}>아래 칸은 AI 정리로 미리 채웠습니다. 확인하고 고친 뒤 확정하세요.</p>
+              <p className="muted" style={{ marginBottom: 0 }}>
+                아래 칸은 AI 정리로 미리 채웠습니다. 확실·추정·확인 필요 표시를 보고 고친 뒤 확정하세요. 원문 표현에 품목을 고르면 다음부터 그 표현을 기억합니다.
+              </p>
             </div>
           )}
           <input type="hidden" name="inbox_id" value={inboxId} />
         </div>
       )}
       <div className="fields">
-        <div><label>{partnerLabel}</label>
+        <div><label>{partnerLabel}{draft && <ConfBadge conf={draft.partner_conf} />}</label>
           <select name="partner_id" required defaultValue={draft?.partner_id ?? defaultPartnerId ?? ""}>
             <option value="" disabled>선택</option>
             {partners.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
           </select>
         </div>
-        <div><label>납기일</label><input type="date" name="due_date" required defaultValue={draft?.due_date ?? ""} /></div>
+        <div><label>납기일{draft && <ConfBadge conf={draft.due_conf} />}</label><input type="date" name="due_date" required defaultValue={draft?.due_date ?? ""} /></div>
         <div><label>메모</label><input name="memo" /></div>
       </div>
       <table style={{ marginBottom: 12 }}>
-        <thead><tr><th>품목</th><th className="num">수량</th><th className="num">단가 (비우면 기본단가)</th></tr></thead>
+        <thead><tr>{showText && <th>원문 표현</th>}<th>품목</th><th className="num">수량</th><th className="num">단가 (비우면 기본단가)</th></tr></thead>
         <tbody>
-          {[0, 1, 2, 3, 4].map((i) => (
+          {Array.from({ length: prefill }, (_, i) => i).map((i) => (
             <tr key={i}>
+              {showText && (
+                <td>
+                  {lines[i] ? <>{lines[i].item_text}<ConfBadge conf={lines[i].conf} /></> : <span className="muted">-</span>}
+                </td>
+              )}
               <td>
+                <input type="hidden" name="draft_text" value={lines[i]?.item_text ?? ""} />
                 <select name="item_id" defaultValue={lines[i]?.item_id ?? ""}>
                   <option value="">-</option>
                   {items.map((it) => (
@@ -85,7 +102,8 @@ export function readLines(formData: FormData) {
   const ids = formData.getAll("item_id").map(Number);
   const qtys = formData.getAll("qty").map(Number);
   const prices = formData.getAll("unit_price").map((v) => (v === "" ? null : Number(v)));
+  const texts = formData.getAll("draft_text").map(String);
   return ids
-    .map((itemId, i) => ({ itemId, qty: qtys[i], price: prices[i] }))
+    .map((itemId, i) => ({ itemId, qty: qtys[i], price: prices[i], draftText: texts[i]?.trim() || null }))
     .filter((l) => l.itemId && l.qty > 0);
 }

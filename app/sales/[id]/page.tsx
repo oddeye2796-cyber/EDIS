@@ -6,7 +6,8 @@ import StatusBadge from "@/components/StatusBadge";
 import Timeline from "@/components/Timeline";
 import FlowSteps from "@/components/FlowSteps";
 import { soFlow } from "@/lib/flow";
-import { shipSO, transitionSO } from "../actions";
+import { stockFor } from "@/lib/stock";
+import { orderShortage, shipSO, transitionSO } from "../actions";
 
 function ActionButton({ id, action, label, kind }: { id: number; action: string; label: string; kind?: string }) {
   return (
@@ -32,8 +33,21 @@ export default async function SODetail({ params }: { params: Promise<{ id: strin
   if (!so) notFound();
   const lines = await query(
     `select l.*, i.code, i.name, i.unit,
-            (select coalesce(sum(qty),0) from lots where item_id = l.item_id and (expiry_date is null or expiry_date >= current_date)) as lot_qty
+            (select string_agg(lt.lot_no || ' ' || trim_scale(sl.qty)::text, ', ' order by sl.id)
+               from shipment_lots sl join lots lt on lt.id = sl.lot_id where sl.so_line_id = l.id) as shipped_lots
        from sales_order_lines l join items i on i.id = l.item_id where l.so_id = $1 order by l.id`,
+    [id],
+  );
+  const stock = await stockFor(lines.map((l) => Number(l.item_id)), id);
+  const check = lines.map((l) => {
+    const s = stock.get(Number(l.item_id))!;
+    const need = Number(l.qty) - Number(l.shipped_qty);
+    const available = Math.max(0, s.on_hand - s.reserved);
+    return { id: l.id, name: l.name, unit: l.unit, need, available, incoming: s.incoming, short: Math.max(0, need - available - s.incoming), lack: need > available };
+  });
+  const sourcePOs = await query(
+    `select po.id, po.po_no, po.status, p.name as supplier from purchase_orders po
+       join partners p on p.id = po.supplier_id where po.source_so_id = $1 order by po.id`,
     [id],
   );
   const status = String(so.status);
@@ -43,7 +57,10 @@ export default async function SODetail({ params }: { params: Promise<{ id: strin
   return (
     <>
       <div className="topbar">
-        <h1>수주 {String(so.so_no)} <StatusBadge kind="so" status={status} /></h1>
+        <h1>
+          {so.kind === "ship_request" ? "출하 지시" : "수주"} {String(so.so_no)} <StatusBadge kind="so" status={status} />
+          {so.urgent ? <> <span className="badge bad">긴급</span></> : null}
+        </h1>
       </div>
       <div className="panel">
         <div className="flow-title">처리 흐름</div>
@@ -56,17 +73,18 @@ export default async function SODetail({ params }: { params: Promise<{ id: strin
           <div><label>납기일</label>{date(so.due_date)}</div>
           <div><label>등록</label>{String(so.creator ?? "-")}</div>
           <div><label>이카운트 판매 전표</label>{String(so.ecount_slip_no ?? "-")}</div>
+          {so.memo ? <div><label>메모</label>{String(so.memo)}</div> : null}
         </div>
         {so.raw_text ? <><label>접수 원문</label><div className="raw" style={{ marginBottom: 12 }}>{String(so.raw_text)}</div></> : null}
         <table>
-          <thead><tr><th>품목</th><th className="num">수주 수량</th><th className="num">출고 수량</th><th className="num">유효 로트 수량</th><th className="num">단가</th><th className="num">금액</th></tr></thead>
+          <thead><tr><th>품목</th><th className="num">수주 수량</th><th className="num">출고 수량</th><th>출고 로트</th><th className="num">단가</th><th className="num">금액</th></tr></thead>
           <tbody>
             {lines.map((l) => (
               <tr key={String(l.id)}>
                 <td>{String(l.code)} {String(l.name)}</td>
                 <td className="num">{qty(l.qty)} {String(l.unit)}</td>
                 <td className="num">{qty(l.shipped_qty)}</td>
-                <td className="num">{qty(l.lot_qty)}</td>
+                <td className="muted">{String(l.shipped_lots ?? "-")}</td>
                 <td className="num">{won(l.unit_price)}</td>
                 <td className="num">{won(Number(l.qty) * Number(l.unit_price))}</td>
               </tr>
@@ -75,6 +93,43 @@ export default async function SODetail({ params }: { params: Promise<{ id: strin
           </tbody>
         </table>
       </div>
+      {["received", "confirmed", "preparing", "partially_shipped"].includes(status) && (
+        <div className="panel">
+          <h2>재고 확인</h2>
+          <p className="muted" style={{ marginTop: 0 }}>가용 재고는 유통기한이 남은 로트 잔량에서 다른 확정 수주가 잡아둔 수량을 뺀 값입니다.</p>
+          <table>
+            <thead><tr><th>품목</th><th className="num">필요</th><th className="num">가용 재고</th><th className="num">입고 예정</th><th className="num">부족</th><th>판정</th></tr></thead>
+            <tbody>
+              {check.map((l) => (
+                <tr key={String(l.id)}>
+                  <td>{String(l.name)}</td>
+                  <td className="num">{qty(l.need)} {String(l.unit)}</td>
+                  <td className="num">{qty(l.available)}</td>
+                  <td className="num">{qty(l.incoming)}</td>
+                  <td className="num">{l.short > 0 ? <b style={{ color: "var(--bad)" }}>{qty(l.short)}</b> : "0"}</td>
+                  <td>{!l.lack ? <span className="badge ok">충분</span> : l.short > 0 ? <span className="badge bad">발주 필요</span> : <span className="badge warn">입고 대기</span>}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {status === "received" && check.some((l) => l.short > 0) && (
+            <form action={orderShortage} style={{ marginTop: 12 }}>
+              <input type="hidden" name="id" value={id} />
+              <button>부족분 발주서 만들기 (공급사별 자동 생성)</button>
+            </form>
+          )}
+          {sourcePOs.length > 0 && (
+            <div style={{ marginTop: 12 }}>
+              <label>이 수주로 만든 발주서</label>
+              {sourcePOs.map((p) => (
+                <div key={String(p.id)}>
+                  <a href={`/purchase/${p.id}`}>{String(p.po_no)}</a> {String(p.supplier)} <StatusBadge kind="po" status={String(p.status)} />
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
       <div className="panel">
         <h2>다음 단계</h2>
         <div className="actions">
@@ -82,6 +137,7 @@ export default async function SODetail({ params }: { params: Promise<{ id: strin
           {status === "confirmed" && <ActionButton id={id} action="prepare" label="출고 준비 시작" />}
           {["received", "confirmed", "preparing"].includes(status) && <ActionButton id={id} action="cancel" label="취소" kind="danger" />}
           {["shipped", "cancelled"].includes(status) && <span className="muted">처리가 끝난 수주입니다.</span>}
+          <a className="btn secondary" href={`/sales/new?copy=${id}`}>같은 내용으로 다시 수주</a>
         </div>
       </div>
       {canShip && (

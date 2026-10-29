@@ -28,17 +28,22 @@ export default async function RootLayout({ children }: { children: React.ReactNo
               </div>
               <div className="links">
                 {user.role === "sales" ? (
-                  <Link href="/submit">주문 올리기</Link>
+                  <>
+                    <Link href="/submit">주문 올리기</Link>
+                    <Link href="/submit?mode=ship">출하 지시</Link>
+                  </>
                 ) : (
                   <>
                     <Link href="/">대시보드</Link>
                     <Link href="/submit">주문 올리기</Link>
                     <Link href="/inbox">주문 접수함</Link>
+                    <Link href="/upload">엑셀 일괄 등록</Link>
                     <Link href="/purchase">발주</Link>
                     <Link href="/sales">수주</Link>
                     <Link href="/lots">로트·유통기한</Link>
                     <Link href="/partners">거래처</Link>
                     <Link href="/items">품목</Link>
+                    <Link href="/report">리포트</Link>
                     <Link href="/ecount">이카운트</Link>
                     <Link href="/notifications">알림{unread?.n ? ` (${unread.n})` : ""}</Link>
                   </>

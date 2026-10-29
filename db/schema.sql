@@ -152,3 +152,34 @@ alter table users add constraint users_role_check check (role in ('office_admin'
 alter table order_inbox add column if not exists image bytea;
 alter table order_inbox add column if not exists image_type text;
 alter table order_inbox add column if not exists sales_note text;
+
+-- 재고 확인: 품목 기본 공급사, 로트 잔량, 출고 로트 기록(추적성)
+alter table items add column if not exists default_supplier_id int references partners(id);
+alter table lots add column if not exists remaining_qty numeric(14,3);
+update lots set remaining_qty = qty where remaining_qty is null;
+create table if not exists shipment_lots (
+  id serial primary key,
+  so_line_id int not null references sales_order_lines(id) on delete cascade,
+  lot_id int not null references lots(id),
+  qty numeric(14,3) not null,
+  at timestamptz not null default now()
+);
+alter table purchase_orders add column if not exists source_so_id int references sales_orders(id);
+
+-- 품목 별칭: 거래처가 부르는 이름 → 내부 품목
+create table if not exists item_aliases (
+  id serial primary key,
+  item_id int not null references items(id) on delete cascade,
+  alias text not null unique,
+  learned boolean not null default false,
+  created_at timestamptz not null default now()
+);
+
+-- 긴급 주문 표시
+alter table order_inbox add column if not exists urgent boolean not null default false;
+alter table partners add column if not exists fax text;
+alter table purchase_orders add column if not exists sent_via text;
+alter table purchase_orders add column if not exists sent_to text;
+alter table sales_orders add column if not exists kind text not null default 'order';
+alter table sales_orders add column if not exists urgent boolean not null default false;
+alter table purchase_orders add column if not exists urgent boolean not null default false;

@@ -6,6 +6,7 @@ import StatusBadge from "@/components/StatusBadge";
 import Timeline from "@/components/Timeline";
 import FlowSteps from "@/components/FlowSteps";
 import { poFlow } from "@/lib/flow";
+import SendPOForm from "@/components/SendPOForm";
 import { receivePO, transitionPO } from "../actions";
 
 function ActionButton({ id, action, label, kind, withMemo }: { id: number; action: string; label: string; kind?: string; withMemo?: boolean }) {
@@ -23,7 +24,7 @@ export default async function PODetail({ params }: { params: Promise<{ id: strin
   const user = await requireUser();
   const id = Number((await params).id);
   const po = await one(
-    `select po.*, p.name as supplier, p.email as supplier_email, p.contact_name,
+    `select po.*, p.name as supplier, p.email as supplier_email, p.phone as supplier_phone, p.fax as supplier_fax, p.contact_name,
             cu.name as creator, au.name as approver, fu.name as confirmer
        from purchase_orders po
        join partners p on p.id = po.supplier_id
@@ -52,7 +53,7 @@ export default async function PODetail({ params }: { params: Promise<{ id: strin
   return (
     <>
       <div className="topbar">
-        <h1>발주서 {String(po.po_no)} <StatusBadge kind="po" status={status} /></h1>
+        <h1>발주서 {String(po.po_no)} <StatusBadge kind="po" status={status} />{po.urgent ? <> <span className="badge bad">긴급</span></> : null}</h1>
       </div>
 
       <div className="panel">
@@ -106,14 +107,20 @@ export default async function PODetail({ params }: { params: Promise<{ id: strin
           )}
           {status === "approved" && role !== "factory_manager" && <span className="muted">공장 관리자의 확인을 기다리는 중입니다.</span>}
           {status === "confirmed" && role !== "factory_manager" && (
-            <ActionButton id={id} action="send" label={`공급사에 발주서 발송 (${po.supplier_email ?? "이메일 없음"})`} />
+            <SendPOForm
+              id={id}
+              action={transitionPO}
+              contacts={{ email: po.supplier_email as string | null, sms: po.supplier_phone as string | null, fax: po.supplier_fax as string | null }}
+            />
           )}
+          {po.sent_via ? <span className="muted">발송: {({ email: "이메일", sms: "문자", fax: "팩스" } as Record<string, string>)[String(po.sent_via)]} {String(po.sent_to ?? "")}</span> : null}
           {status === "confirmed" && role === "factory_manager" && <span className="muted">사무실에서 공급사에 발송할 차례입니다.</span>}
           {status === "rejected" && <ActionButton id={id} action="resubmit" label="다시 승인 요청" kind="secondary" />}
           {["pending_approval", "approved", "confirmed", "sent"].includes(status) && role === "office_admin" && (
             <ActionButton id={id} action="cancel" label="발주 취소" kind="danger" withMemo />
           )}
           {["received", "cancelled"].includes(status) && <span className="muted">처리가 끝난 발주서입니다.</span>}
+          <a className="btn secondary" href={`/purchase/new?copy=${id}`}>같은 내용으로 다시 발주</a>
         </div>
       </div>
 

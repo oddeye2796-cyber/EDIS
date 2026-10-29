@@ -37,14 +37,19 @@ export default async function InboxPage() {
   const partners = await query<{ id: number; name: string; type: string }>(
     "select id, name, type from partners order by name",
   );
+  // 아직 정리되지 않은 새 접수(예: 시연 데이터)는 화면을 열 때 정리합니다.
+  const undrafted = await query<{ id: number }>(
+    "select id from order_inbox where status = 'new' and ai_draft is null and ai_error is null order by id limit 10",
+  );
+  for (const r of undrafted) await draftInbox(r.id);
   const rows = await query(
     `select i.id, i.channel, i.direction, i.raw_text, i.received_at, i.status, i.linked_doc_type, i.linked_doc_id,
-            i.ai_draft, i.ai_error, i.sales_note, (i.image is not null) as has_image,
+            i.ai_draft, i.ai_error, i.sales_note, i.urgent, (i.image is not null) as has_image,
             p.name as partner_name, u.name as receiver
        from order_inbox i
        left join partners p on p.id = i.partner_id
        left join users u on u.id = i.received_by
-      order by (i.status = 'new') desc, i.received_at desc
+      order by (i.status = 'new') desc, (i.status = 'new' and i.urgent) desc, i.received_at desc
       limit 100`,
   );
   return (
@@ -94,8 +99,8 @@ export default async function InboxPage() {
               const dir = draft && draft.direction !== "unknown" ? draft.direction : String(r.direction);
               const target = dir === "sales" ? "sales" : "purchase";
               return (
-                <tr key={String(r.id)}>
-                  <td>{dateTime(r.received_at)}<div className="muted">{String(r.receiver ?? "")}</div></td>
+                <tr key={String(r.id)} style={isNew && r.urgent ? { background: "#fff5f5" } : undefined}>
+                  <td>{isNew && r.urgent ? <div><span className="badge bad">긴급</span></div> : null}{dateTime(r.received_at)}<div className="muted">{String(r.receiver ?? "")}</div></td>
                   <td><span className="badge info">{channelLabel[String(r.channel)]}</span></td>
                   <td>{r.direction === "sales" ? "수주" : "발주"}</td>
                   <td>{String(r.partner_name ?? "-")}</td>
@@ -155,6 +160,7 @@ function DraftCell({ draft, error }: { draft: Draft | null; error: string | null
   return (
     <div>
       <div>{draft.summary}</div>
+      {draft.urgent && draft.urgent_reason && <div style={{ color: "var(--bad)", fontSize: 13 }}>긴급: {draft.urgent_reason}</div>}
       {draft.needs_check.length > 0 && (
         <ul style={{ margin: "4px 0 0", paddingLeft: 16, color: "var(--warn)" }}>
           {draft.needs_check.map((n, i) => <li key={i}>{n}</li>)}

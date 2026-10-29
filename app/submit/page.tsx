@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { query } from "@/lib/db";
+import { one, query, tx } from "@/lib/db";
+import { logStatus, nextDocNo, notify } from "@/lib/workflow";
 import { requireUser } from "@/lib/auth";
 import { channelLabel, dateTime } from "@/lib/labels";
 import { draftInbox } from "@/lib/inbox";
@@ -40,10 +41,72 @@ async function submitOrder(formData: FormData) {
   redirect(`/submit?done=${row.id}`);
 }
 
-export default async function SubmitPage({ searchParams }: { searchParams: Promise<{ done?: string }> }) {
+// 출하 지시: 영업 담당자가 거래처·품목·수량·납기를 직접 골라 보내면 바로 수주(출하 지시)로 등록됩니다.
+async function shipRequest(formData: FormData) {
+  "use server";
   const user = await requireUser();
-  const { done } = await searchParams;
+  const customerId = Number(formData.get("customer_id"));
+  const ids = formData.getAll("item_id").map(Number);
+  const qtys = formData.getAll("qty").map(Number);
+  const lines = ids.map((itemId, i) => ({ itemId, qty: qtys[i] })).filter((l) => l.itemId && l.qty > 0);
+  if (!customerId) throw new Error("납품할 거래처를 고르세요.");
+  if (lines.length === 0) throw new Error("품목과 수량을 한 줄 이상 입력하세요.");
+  const urgent = formData.get("urgent") === "on";
+  const soNo = await tx(async (c) => {
+    const soNo = await nextDocNo(c, "SO");
+    const { rows } = await c.query(
+      `insert into sales_orders (so_no, customer_id, due_date, memo, created_by, kind, urgent)
+       values ($1,$2,$3,$4,$5,'ship_request',$6) returning id`,
+      [soNo, customerId, formData.get("due_date") || null, String(formData.get("memo") ?? "").trim() || null, user.id, urgent],
+    );
+    const soId = rows[0].id as number;
+    for (const l of lines) {
+      await c.query(
+        `insert into sales_order_lines (so_id, item_id, qty, unit_price)
+         values ($1,$2,$3,(select default_price from items where id = $2))`,
+        [soId, l.itemId, l.qty],
+      );
+    }
+    await logStatus(c, "so", soId, null, "received", user.id, `${user.name}님 출하 지시${urgent ? " (긴급)" : ""}`);
+    const msg = `${urgent ? "[긴급] " : ""}${user.name}님 출하 지시 ${soNo}: 재고 확인 후 확정해 주세요.`;
+    await notify(c, "office_admin", msg, `/sales/${soId}`);
+    await notify(c, "staff", msg, `/sales/${soId}`);
+    return soNo;
+  });
+  redirect(`/submit?mode=ship&sent=${soNo}`);
+}
+
+export default async function SubmitPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ done?: string; mode?: string; sent?: string; copy?: string }>;
+}) {
+  const user = await requireUser();
+  const { done, mode, sent, copy } = await searchParams;
+  const ship = mode === "ship";
   const partners = await query<{ id: number; name: string }>("select id, name from partners order by name");
+  const customers = await query<{ id: number; name: string }>(
+    "select id, name from partners where type in ('customer','both') order by name",
+  );
+  const items = await query<{ id: number; code: string; name: string; unit: string }>("select id, code, name, unit from items order by code");
+  // 다시 보내기: 지난 출하 지시 내용을 칸에 미리 채웁니다.
+  const base = copy
+    ? await one<{ customer_id: number; memo: string | null }>(
+        "select customer_id, memo from sales_orders where id = $1 and created_by = $2",
+        [Number(copy), user.id],
+      )
+    : null;
+  const baseLines = base
+    ? await query<{ item_id: number; qty: string }>("select item_id, qty from sales_order_lines where so_id = $1 order by id", [Number(copy)])
+    : [];
+  const myShips = await query(
+    `select so.id, so.so_no, so.status, so.urgent, so.created_at, so.due_date, so.ecount_slip_no, p.name as customer,
+            (select string_agg(i.name || ' ' || trim_scale(l.qty)::text || i.unit, ', ' order by l.id)
+               from sales_order_lines l join items i on i.id = l.item_id where l.so_id = so.id) as summary
+       from sales_orders so join partners p on p.id = so.customer_id
+      where so.created_by = $1 and so.kind = 'ship_request' order by so.created_at desc limit 10`,
+    [user.id],
+  );
   const mine = await query(
     `select i.id, i.channel, i.direction, i.raw_text, i.received_at, i.status, i.ai_draft, i.linked_doc_type, i.linked_doc_id,
             coalesce(po.status, so.status) as doc_status, coalesce(po.po_no, so.so_no) as doc_no,
@@ -58,7 +121,67 @@ export default async function SubmitPage({ searchParams }: { searchParams: Promi
   return (
     <div className="narrow">
       <h1 style={{ marginBottom: 4 }}>주문 올리기</h1>
-      <p className="muted" style={{ marginTop: 0 }}>거래처에게 받은 카톡·문자·메일을 그대로 붙여 넣거나 캡처 사진을 올리세요. 수발주 담당자가 확인 후 처리합니다.</p>
+      <div className="chips" style={{ margin: "8px 0 12px" }}>
+        <Link href="/submit" className={`chip ${ship ? "" : "on"}`}>받은 메시지 전달</Link>
+        <Link href="/submit?mode=ship" className={`chip ${ship ? "on" : ""}`}>출하 지시</Link>
+      </div>
+      <p className="muted" style={{ marginTop: 0 }}>
+        {ship
+          ? "어느 거래처에 어떤 품목을 몇 개 납품할지 직접 골라 보내세요. 바로 출하 지시로 등록되어 재고 확인과 출고로 넘어갑니다."
+          : "거래처에게 받은 카톡·문자·메일을 그대로 붙여 넣거나 캡처 사진을 올리세요. 수발주 담당자가 확인 후 처리합니다."}
+      </p>
+      {ship && sent && (
+        <div className="panel" style={{ borderColor: "var(--ok)" }}>
+          <b>출하 지시 {sent}가 등록되었습니다.</b> 아래에서 진행 상황을 볼 수 있어요.
+        </div>
+      )}
+      {ship && (
+        <form action={shipRequest} className="panel">
+          <label>납품할 거래처</label>
+          <select name="customer_id" required defaultValue={base?.customer_id ?? ""} style={{ fontSize: 16 }}>
+            <option value="" disabled>선택</option>
+            {customers.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+          </select>
+          <label style={{ marginTop: 12 }}>품목과 수량</label>
+          {[0, 1, 2].map((i) => (
+            <div key={i} className="ship-line">
+              <select name="item_id" defaultValue={baseLines[i]?.item_id ?? ""} style={{ fontSize: 16 }}>
+                <option value="">{i === 0 ? "품목 선택" : "품목 추가 (선택)"}</option>
+                {items.map((it) => <option key={it.id} value={it.id}>{it.name} ({it.unit})</option>)}
+              </select>
+              <input name="qty" type="number" step="0.001" min="0" inputMode="decimal" placeholder="수량" defaultValue={baseLines[i] ? Number(baseLines[i].qty) : ""} style={{ fontSize: 16 }} />
+            </div>
+          ))}
+          <div className="fields" style={{ marginTop: 12 }}>
+            <div><label>납품일</label><input type="date" name="due_date" required style={{ fontSize: 16 }} /></div>
+            <div><label>메모</label><input name="memo" defaultValue={base?.memo ?? ""} placeholder="예) 오전 중 도착" style={{ fontSize: 16 }} /></div>
+          </div>
+          <label className="chip" style={{ marginTop: 8 }}><input type="checkbox" name="urgent" /> 긴급</label>
+          <button className="block" style={{ marginTop: 16 }}>출하 지시 보내기</button>
+        </form>
+      )}
+      {ship && (
+        <>
+          <h2>내 출하 지시</h2>
+          <div className="cards">
+            {myShips.map((m) => (
+              <div key={String(m.id)} className="panel">
+                <div className="actions" style={{ justifyContent: "space-between" }}>
+                  <span><b>{String(m.so_no)}</b> {m.urgent ? <span className="badge bad">긴급</span> : null}</span>
+                  <span className="muted" style={{ fontSize: 12 }}>{dateTime(m.created_at)}</span>
+                </div>
+                <div style={{ marginTop: 8 }}>{String(m.customer)} · {String(m.summary ?? "")}</div>
+                <div style={{ marginTop: 8 }}>
+                  <FlowSteps compact flow={soFlow(String(m.status), false, m.ecount_slip_no as string | null)} />
+                </div>
+                <Link href={`/submit?mode=ship&copy=${m.id}`}>같은 내용으로 다시 보내기</Link>
+              </div>
+            ))}
+            {myShips.length === 0 && <p className="muted">아직 보낸 출하 지시가 없습니다.</p>}
+          </div>
+        </>
+      )}
+      {!ship && (<>
 
       {done && (
         <div className="panel" style={{ borderColor: "var(--ok)" }}>
@@ -72,6 +195,10 @@ export default async function SubmitPage({ searchParams }: { searchParams: Promi
 
         <label style={{ marginTop: 12 }}>캡처 사진 (선택)</label>
         <input type="file" name="image" accept="image/*" />
+        <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>손글씨 주문서 사진 자동 읽기는 AI 키를 연결하면 켜집니다.</div>
+        <button type="button" className="secondary block" disabled style={{ marginTop: 8, opacity: 0.6 }}>
+          음성으로 주문 남기기 (준비 중, AI 키 연결 후 사용)
+        </button>
 
         <label style={{ marginTop: 12 }}>어디서 받았나요?</label>
         <div className="chips">
@@ -139,6 +266,7 @@ export default async function SubmitPage({ searchParams }: { searchParams: Promi
         })}
         {mine.length === 0 && <p className="muted">아직 올린 주문이 없습니다.</p>}
       </div>
+      </>)}
     </div>
   );
 }

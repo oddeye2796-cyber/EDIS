@@ -1,10 +1,11 @@
 "use server";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { tx } from "@/lib/db";
+import { one, query, tx } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
 import { logStatus, nextDocNo, notify } from "@/lib/workflow";
 import { pushSlip } from "@/lib/ecount";
+import { allocateFEFO, createShortagePOs, learnAliases, stockFor } from "@/lib/stock";
 import { readLines } from "@/components/OrderForm";
 
 export async function createSO(formData: FormData) {
@@ -15,8 +16,8 @@ export async function createSO(formData: FormData) {
   const id = await tx(async (c) => {
     const soNo = await nextDocNo(c, "SO");
     const { rows } = await c.query(
-      `insert into sales_orders (so_no, customer_id, due_date, memo, created_by, inbox_id)
-       values ($1,$2,$3,$4,$5,$6) returning id`,
+      `insert into sales_orders (so_no, customer_id, due_date, memo, created_by, inbox_id, urgent)
+       values ($1,$2,$3,$4,$5,$6, coalesce((select urgent from order_inbox where id = $6), false)) returning id`,
       [soNo, Number(formData.get("partner_id")), formData.get("due_date"), formData.get("memo") || null, user.id, inboxId],
     );
     const soId = rows[0].id as number;
@@ -27,6 +28,7 @@ export async function createSO(formData: FormData) {
         [soId, l.itemId, l.qty, l.price],
       );
     }
+    await learnAliases(c, lines);
     if (inboxId) {
       await c.query(
         "update order_inbox set status = 'converted', linked_doc_type = 'so', linked_doc_id = $1 where id = $2",
@@ -41,7 +43,7 @@ export async function createSO(formData: FormData) {
 }
 
 const flow: Record<string, { from: string[]; to: string; notifyRole?: string; message: string }> = {
-  confirm: { from: ["received"], to: "confirmed", notifyRole: "factory_manager", message: "수주 확정, 출고 준비를 요청합니다." },
+  confirm: { from: ["received"], to: "confirmed", notifyRole: "factory_manager", message: "재고 확인 후 수주 확정, 출고 준비를 요청합니다." },
   prepare: { from: ["confirmed"], to: "preparing", message: "출고 준비를 시작했습니다." },
   cancel: { from: ["received", "confirmed", "preparing"], to: "cancelled", message: "취소되었습니다." },
 };
@@ -79,7 +81,11 @@ export async function shipSO(formData: FormData) {
     for (let i = 0; i < lineIds.length; i++) {
       if (!(qtys[i] > 0)) continue;
       any = true;
-      await c.query("update sales_order_lines set shipped_qty = shipped_qty + $2 where id = $1 and so_id = $3", [lineIds[i], qtys[i], id]);
+      const { rows: lr } = await c.query(
+        "update sales_order_lines set shipped_qty = shipped_qty + $2 where id = $1 and so_id = $3 returning item_id",
+        [lineIds[i], qtys[i], id],
+      );
+      await allocateFEFO(c, lineIds[i], lr[0].item_id, qtys[i]);
     }
     if (!any) throw new Error("출고 수량을 입력하세요.");
     const { rows: remain } = await c.query(
@@ -100,6 +106,33 @@ export async function shipSO(formData: FormData) {
       await logStatus(c, "so", id, next, next, user.id, `이카운트 판매 전표 등록 (${slip})`);
       await notify(c, null, `수주 ${so.so_no} 출고 완료, 이카운트 판매 전표 ${slip} 등록`, `/sales/${id}`);
     }
+  });
+  revalidatePath(`/sales/${id}`);
+}
+
+export async function orderShortage(formData: FormData) {
+  const user = await requireUser();
+  const id = Number(formData.get("id"));
+  const row = await one<{ so_no: string; due_date: Date | null; status: string }>(
+    "select so_no, due_date, status from sales_orders where id = $1",
+    [id],
+  );
+  if (!row || row.status !== "received") throw new Error("재고 확인 단계의 수주만 부족분 발주를 만들 수 있습니다.");
+  const lines = await query<{ item_id: number; remain: string }>(
+    "select item_id, sum(qty - shipped_qty) as remain from sales_order_lines where so_id = $1 group by item_id",
+    [id],
+  );
+  const stock = await stockFor(lines.map((l) => l.item_id), id);
+  const shortages = lines
+    .map((l) => {
+      const s = stock.get(l.item_id)!;
+      return { item_id: l.item_id, qty: Number(l.remain) - (s.on_hand - s.reserved) - s.incoming };
+    })
+    .filter((s) => s.qty > 0);
+  if (shortages.length === 0) throw new Error("부족한 품목이 없습니다.");
+  await tx(async (c) => {
+    const { created } = await createShortagePOs(c, id, row.so_no, row.due_date, shortages, user.id);
+    await logStatus(c, "so", id, row.status, row.status, user.id, `재고 부족분 발주서 생성: ${created.join(", ")}`);
   });
   revalidatePath(`/sales/${id}`);
 }

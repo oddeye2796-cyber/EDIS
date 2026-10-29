@@ -2,11 +2,13 @@ import { query, one } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
 import OrderForm from "@/components/OrderForm";
 import type { Draft } from "@/lib/extract";
+import { copyDraft } from "@/lib/copy";
 import { createSO } from "../actions";
 
-export default async function NewSO({ searchParams }: { searchParams: Promise<{ inbox?: string }> }) {
+export default async function NewSO({ searchParams }: { searchParams: Promise<{ inbox?: string; copy?: string }> }) {
   await requireUser();
-  const { inbox } = await searchParams;
+  const { inbox, copy } = await searchParams;
+  const copied = copy ? await copyDraft("so", Number(copy)) : null;
   const inboxRow = inbox
     ? await one<{ id: number; raw_text: string; partner_id: number | null; ai_draft: Draft | null }>(
         "select id, raw_text, partner_id, ai_draft from order_inbox where id = $1",
@@ -31,7 +33,7 @@ export default async function NewSO({ searchParams }: { searchParams: Promise<{ 
           defaultPartnerId={inboxRow?.partner_id}
           inboxId={inboxRow?.id}
           inboxText={inboxRow?.raw_text}
-          draft={inboxRow?.ai_draft}
+          draft={inboxRow?.ai_draft ?? copied}
           submitLabel="수주 등록"
         />
       </div>

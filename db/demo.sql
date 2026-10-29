@@ -41,6 +41,7 @@ select so.id, i.id, 40, 120000 from so, items i where i.code = 'RM-003';
 
 insert into lots (item_id, lot_no, mfg_date, expiry_date, qty, coa_note)
 select id, 'RG-2510-07', current_date - 300, current_date + 45, 60, 'COA 수령, 적합' from items where code = 'RM-003';
+update lots set remaining_qty = qty where remaining_qty is null;
 
 insert into status_logs (doc_type, doc_id, from_status, to_status, actor_id, memo)
 select 'po', id, null, status, 3, '데모 데이터' from purchase_orders where po_no like 'PO-DEMO-%';

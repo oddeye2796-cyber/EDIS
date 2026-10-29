@@ -1,7 +1,7 @@
 // 발주·수주가 지금 어느 단계에 있는지 계산합니다. 화면의 진행 바(FlowSteps)가 사용합니다.
 
 export const poSteps = ["주문 접수", "AI 정리", "발주서 작성", "오피스 승인", "공장 확인", "발주서 발송", "입고", "이카운트 전표"];
-export const soSteps = ["주문 접수", "AI 정리", "담당자 확인", "수주 확정", "출고 준비", "출고", "이카운트 전표"];
+export const soSteps = ["주문 접수", "AI 정리", "담당자 확인", "재고 확인·확정", "출고 준비", "출고", "이카운트 전표"];
 
 export type FlowState = { steps: string[]; current: number; tone: "active" | "done" | "stopped"; note?: string };
 

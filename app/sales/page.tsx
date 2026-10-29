@@ -10,7 +10,7 @@ export default async function SalesList() {
     `select so.*, p.name as customer,
             (select coalesce(sum(qty * unit_price),0) from sales_order_lines where so_id = so.id) as total
        from sales_orders so join partners p on p.id = so.customer_id
-      order by so.created_at desc`,
+      order by (so.urgent and so.status not in ('shipped','cancelled')) desc, so.created_at desc`,
   );
   return (
     <>
@@ -24,7 +24,11 @@ export default async function SalesList() {
           <tbody>
             {rows.map((r) => (
               <tr key={String(r.id)}>
-                <td><Link href={`/sales/${r.id}`}>{String(r.so_no)}</Link></td>
+                <td>
+                  <Link href={`/sales/${r.id}`}>{String(r.so_no)}</Link>
+                  {r.urgent ? <> <span className="badge bad">긴급</span></> : null}
+                  {r.kind === "ship_request" ? <> <span className="badge info">출하 지시</span></> : null}
+                </td>
                 <td>{String(r.customer)}</td>
                 <td>{date(r.order_date)}</td>
                 <td>{date(r.due_date)} <DueBadge due={r.due_date} done={["shipped", "cancelled"].includes(String(r.status))} /></td>

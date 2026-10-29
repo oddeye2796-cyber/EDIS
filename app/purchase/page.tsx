@@ -10,7 +10,7 @@ export default async function PurchaseList() {
     `select po.*, p.name as supplier,
             (select coalesce(sum(qty * unit_price),0) from purchase_order_lines where po_id = po.id) as total
        from purchase_orders po join partners p on p.id = po.supplier_id
-      order by po.created_at desc`,
+      order by (po.urgent and po.status not in ('received','cancelled','rejected')) desc, po.created_at desc`,
   );
   return (
     <>
@@ -24,7 +24,10 @@ export default async function PurchaseList() {
           <tbody>
             {rows.map((r) => (
               <tr key={String(r.id)}>
-                <td><Link href={`/purchase/${r.id}`}>{String(r.po_no)}</Link></td>
+                <td>
+                  <Link href={`/purchase/${r.id}`}>{String(r.po_no)}</Link>
+                  {r.urgent ? <> <span className="badge bad">긴급</span></> : null}
+                </td>
                 <td>{String(r.supplier)}</td>
                 <td>{date(r.order_date)}</td>
                 <td>{date(r.due_date)} <DueBadge due={r.due_date} done={["received", "cancelled", "rejected"].includes(String(r.status))} /></td>

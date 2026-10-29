@@ -8,8 +8,8 @@ async function addPartner(formData: FormData) {
   await requireUser();
   const f = (k: string) => String(formData.get(k) ?? "").trim() || null;
   await query(
-    "insert into partners (type, name, biz_no, contact_name, phone, email, payment_terms, ecount_code) values ($1,$2,$3,$4,$5,$6,$7,$8)",
-    [f("type"), f("name"), f("biz_no"), f("contact_name"), f("phone"), f("email"), f("payment_terms"), f("ecount_code")],
+    "insert into partners (type, name, biz_no, contact_name, phone, email, payment_terms, ecount_code, fax) values ($1,$2,$3,$4,$5,$6,$7,$8,$9)",
+    [f("type"), f("name"), f("biz_no"), f("contact_name"), f("phone"), f("email"), f("payment_terms"), f("ecount_code"), f("fax")],
   );
   revalidatePath("/partners");
 }
@@ -24,7 +24,7 @@ export default async function PartnersPage() {
         <table>
           <thead>
             <tr>
-              <th>구분</th><th>거래처명</th><th>사업자번호</th><th>담당자</th><th>연락처</th><th>이메일</th><th>결제조건</th><th>이카운트 코드</th>
+              <th>구분</th><th>거래처명</th><th>사업자번호</th><th>담당자</th><th>연락처</th><th>팩스</th><th>이메일</th><th>결제조건</th><th>이카운트 코드</th>
             </tr>
           </thead>
           <tbody>
@@ -35,6 +35,7 @@ export default async function PartnersPage() {
                 <td>{String(p.biz_no ?? "")}</td>
                 <td>{String(p.contact_name ?? "")}</td>
                 <td>{String(p.phone ?? "")}</td>
+                <td>{String(p.fax ?? "")}</td>
                 <td>{String(p.email ?? "")}</td>
                 <td>{String(p.payment_terms ?? "")}</td>
                 <td>{String(p.ecount_code ?? "")}</td>
@@ -54,6 +55,7 @@ export default async function PartnersPage() {
             <div><label>사업자번호</label><input name="biz_no" /></div>
             <div><label>담당자</label><input name="contact_name" /></div>
             <div><label>연락처</label><input name="phone" /></div>
+            <div><label>팩스</label><input name="fax" /></div>
             <div><label>이메일</label><input name="email" type="email" /></div>
             <div><label>결제조건</label><input name="payment_terms" /></div>
             <div><label>이카운트 거래처코드</label><input name="ecount_code" /></div>

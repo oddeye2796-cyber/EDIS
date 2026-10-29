@@ -125,3 +125,8 @@ button.block { width: 100%; padding: 12px; font-size: 16px; }
 .flow-mini-label.stopped { color: var(--bad); }
 .flow-mini-label.done { color: var(--ok); }
 @keyframes flowblink { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+.chip.on { border-color: var(--accent); background: #e8f0fe; color: var(--accent); font-weight: 600; }
+a.chip { text-decoration: none; }
+.ship-line { display: grid; grid-template-columns: 1fr 110px; gap: 8px; margin-bottom: 8px; }
+.bar { height: 8px; background: var(--accent); border-radius: 4px; opacity: .75; }
+button.link { background: none; border: none; color: inherit; padding: 0 2px; cursor: pointer; font-size: 13px; }

@@ -6,6 +6,7 @@ import { requireUser, type Role } from "@/lib/auth";
 import { logStatus, nextDocNo, notify } from "@/lib/workflow";
 import { pushSlip } from "@/lib/ecount";
 import { readLines } from "@/components/OrderForm";
+import { learnAliases } from "@/lib/stock";
 
 export async function createPO(formData: FormData) {
   const user = await requireUser();
@@ -15,8 +16,8 @@ export async function createPO(formData: FormData) {
   const id = await tx(async (c) => {
     const poNo = await nextDocNo(c, "PO");
     const { rows } = await c.query(
-      `insert into purchase_orders (po_no, supplier_id, status, due_date, memo, created_by, inbox_id)
-       values ($1,$2,'pending_approval',$3,$4,$5,$6) returning id`,
+      `insert into purchase_orders (po_no, supplier_id, status, due_date, memo, created_by, inbox_id, urgent)
+       values ($1,$2,'pending_approval',$3,$4,$5,$6, coalesce((select urgent from order_inbox where id = $6), false)) returning id`,
       [poNo, Number(formData.get("partner_id")), formData.get("due_date"), formData.get("memo") || null, user.id, inboxId],
     );
     const poId = rows[0].id as number;
@@ -27,6 +28,7 @@ export async function createPO(formData: FormData) {
         [poId, l.itemId, l.qty, l.price],
       );
     }
+    await learnAliases(c, lines);
     if (inboxId) {
       await c.query(
         "update order_inbox set status = 'converted', linked_doc_type = 'po', linked_doc_id = $1 where id = $2",
@@ -52,13 +54,21 @@ const transitions: Record<
   resubmit: { from: ["rejected"], to: "pending_approval", roles: ["office_admin", "staff", "factory_manager"], notifyRole: "office_admin", message: "다시 승인을 요청합니다." },
 };
 
+const sendVia: Record<string, string> = { email: "이메일", sms: "문자", fax: "팩스" };
+
 export async function transitionPO(formData: FormData) {
   const user = await requireUser();
   const id = Number(formData.get("id"));
   const t = transitions[String(formData.get("action"))];
   if (!t) throw new Error("알 수 없는 동작입니다.");
   if (!t.roles.includes(user.role)) throw new Error("이 단계를 처리할 권한이 없습니다.");
-  const memo = String(formData.get("memo") ?? "").trim();
+  let memo = String(formData.get("memo") ?? "").trim();
+  const via = String(formData.get("send_via") ?? "");
+  const to = String(formData.get("send_to") ?? "").trim();
+  if (formData.get("action") === "send") {
+    if (!sendVia[via] || !to) throw new Error("발송 방법과 받는 곳을 입력하세요.");
+    memo = `${sendVia[via]}(${to})로 발주서를 보냈습니다.${process.env.SEND_LIVE ? "" : " (데모: 실제 발송 없음)"}`;
+  }
   await tx(async (c) => {
     const { rows } = await c.query("select po_no, status from purchase_orders where id = $1 for update", [id]);
     const po = rows[0];
@@ -68,6 +78,7 @@ export async function transitionPO(formData: FormData) {
       `update purchase_orders set status = $2${stamp} where id = $1`,
       t.stamp ? [id, t.to, user.id] : [id, t.to],
     );
+    if (via && t.to === "sent") await c.query("update purchase_orders set sent_via = $2, sent_to = $3 where id = $1", [id, via, to]);
     await logStatus(c, "po", id, po.status, t.to, user.id, memo || t.message);
     if (t.notifyRole) await notify(c, t.notifyRole, `발주서 ${po.po_no}: ${t.message}`, `/purchase/${id}`);
   });
@@ -101,8 +112,8 @@ export async function receivePO(formData: FormData) {
         [lineIds[i], qtys[i], id],
       );
       await c.query(
-        `insert into lots (item_id, lot_no, mfg_date, expiry_date, qty, coa_note, po_line_id)
-         values ($1,$2,$3,$4,$5,$6,$7)`,
+        `insert into lots (item_id, lot_no, mfg_date, expiry_date, qty, remaining_qty, coa_note, po_line_id)
+         values ($1,$2,$3,$4,$5,$5,$6,$7)`,
         [lr[0].item_id, lotNos[i].trim(), mfg[i] || null, exp[i] || null, qtys[i], coa[i] || null, lineIds[i]],
       );
     }
