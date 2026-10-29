@@ -1,16 +1,15 @@
 import { revalidatePath } from "next/cache";
 import { query } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
+import Link from "next/link";
 import { itemCategory, won } from "@/lib/labels";
+import { syncMaster } from "@/lib/master";
+import SyncBar from "@/components/SyncBar";
 
-async function addItem(formData: FormData) {
+async function sync() {
   "use server";
   await requireUser();
-  const f = (k: string) => String(formData.get(k) ?? "").trim() || null;
-  await query(
-    "insert into items (code, name, category, spec, unit, storage_condition, default_price, ecount_code) values ($1,$2,$3,$4,$5,$6,$7,$8)",
-    [f("code"), f("name"), f("category"), f("spec"), f("unit") ?? "kg", f("storage_condition"), Number(f("default_price") ?? 0), f("ecount_code")],
-  );
+  await syncMaster("items");
   revalidatePath("/items");
 }
 
@@ -34,17 +33,44 @@ async function removeAlias(formData: FormData) {
   revalidatePath("/items");
 }
 
-export default async function ItemsPage() {
+export default async function ItemsPage({ searchParams }: { searchParams: Promise<{ q?: string; category?: string }> }) {
   await requireUser();
-  const items = await query("select * from items order by code");
+  const sp = await searchParams;
+  const q = (sp.q ?? "").trim();
+  const category = sp.category && sp.category in itemCategory ? sp.category : "";
+  // 별칭으로도 찾을 수 있게 합니다 (예: "트루락").
+  const items = await query(
+    `select * from items i
+      where ($1 = '' or i.code ilike '%' || $1 || '%' or i.name ilike '%' || $1 || '%'
+             or coalesce(i.ecount_code, '') ilike '%' || $1 || '%'
+             or exists (select 1 from item_aliases a where a.item_id = i.id and a.alias ilike '%' || $1 || '%'))
+        and ($2 = '' or i.category = $2)
+      order by i.code`,
+    [q, category],
+  );
   const aliases = await query<{ id: number; item_id: number; alias: string; learned: boolean }>(
     "select id, item_id, alias, learned from item_aliases order by alias",
   );
   return (
     <>
       <h1 style={{ marginBottom: 4 }}>품목</h1>
-      <p className="muted" style={{ marginTop: 0 }}>현장 별칭은 카톡·문자 원문에서 품목을 알아보는 사전입니다. 주문을 확정할 때 원문 표현이 자동으로 학습됩니다(파란색).</p>
+      <p className="muted" style={{ marginTop: 0 }}>현장 별칭은 EDIS에만 있는 정보라 여기서 고칠 수 있습니다. 카톡·문자 원문에서 품목을 알아보는 사전이고, 주문을 확정할 때 원문 표현이 자동으로 학습됩니다(파란색).</p>
+      <SyncBar kind="items" action={sync} />
       <div className="panel">
+        <form className="filters">
+          <div><label>구분</label>
+            <select name="category" defaultValue={category}>
+              <option value="">전체</option>
+              {Object.entries(itemCategory).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+            </select>
+          </div>
+          <div><label>검색어</label><input name="q" defaultValue={q} placeholder="품목코드, 품목명, 이카운트 코드, 별칭" /></div>
+          <div className="filter-actions">
+            <button>조회</button>
+            {(q || category) && <Link href="/items">초기화</Link>}
+          </div>
+        </form>
+        <div className="muted" style={{ marginBottom: 8 }}>{items.length}건</div>
         <table>
           <thead>
             <tr><th>코드</th><th>품목명</th><th>구분</th><th>규격</th><th>단위</th><th>보관조건</th><th className="num">기본단가</th><th>이카운트 코드</th><th>현장 별칭</th></tr>
@@ -76,24 +102,9 @@ export default async function ItemsPage() {
                 </td>
               </tr>
             ))}
+            {items.length === 0 && <tr><td colSpan={9} className="muted">조건에 맞는 품목이 없습니다.</td></tr>}
           </tbody>
         </table>
-      </div>
-      <div className="panel">
-        <h2>품목 추가</h2>
-        <form action={addItem}>
-          <div className="fields">
-            <div><label>품목코드</label><input name="code" required /></div>
-            <div><label>품목명</label><input name="name" required /></div>
-            <div><label>구분</label><select name="category"><option value="raw">원료</option><option value="sub">부재료</option><option value="product">완제품</option></select></div>
-            <div><label>규격</label><input name="spec" /></div>
-            <div><label>단위</label><input name="unit" defaultValue="kg" /></div>
-            <div><label>보관조건</label><input name="storage_condition" /></div>
-            <div><label>기본단가 (원)</label><input name="default_price" type="number" step="0.01" /></div>
-            <div><label>이카운트 품목코드</label><input name="ecount_code" /></div>
-          </div>
-          <button>추가</button>
-        </form>
       </div>
     </>
   );

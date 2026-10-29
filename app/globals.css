@@ -137,3 +137,7 @@ a.chip { text-decoration: none; }
 button.link { background: none; border: none; color: inherit; padding: 0 2px; cursor: pointer; font-size: 13px; }
 .contract-row { display: block; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; margin-top: 8px; color: var(--text); text-decoration: none; }
 .contract-row:hover { border-color: var(--accent); }
+
+.filters { display: grid; grid-template-columns: 160px minmax(200px, 1fr) auto; gap: 12px; align-items: end; margin-bottom: 12px; }
+.filters .filter-actions { display: flex; gap: 10px; align-items: center; }
+@media (max-width: 768px) { .filters { grid-template-columns: 1fr; } }
