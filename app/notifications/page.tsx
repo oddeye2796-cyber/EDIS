@@ -3,19 +3,20 @@ import { revalidatePath } from "next/cache";
 import { query } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
 import { dateTime } from "@/lib/labels";
+import { visibleNotice } from "@/lib/shipments";
 
 async function markAllRead() {
   "use server";
   const user = await requireUser();
-  await query("update notifications set read = true where user_role is null or user_role = $1", [user.role]);
+  await query(`update notifications set read = true where ${visibleNotice}`, [user.role, user.id]);
   revalidatePath("/", "layout");
 }
 
 export default async function NotificationsPage() {
   const user = await requireUser();
   const rows = await query(
-    "select * from notifications where user_role is null or user_role = $1 order by created_at desc limit 100",
-    [user.role],
+    `select * from notifications where ${visibleNotice} order by created_at desc limit 100`,
+    [user.role, user.id],
   );
   return (
     <>

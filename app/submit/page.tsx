@@ -84,16 +84,16 @@ async function saveShipRequest(formData: FormData) {
     await notify(c, "staff", msg, `/sales/${soId}`);
     return soNo;
   });
-  redirect(`/submit?mode=ship&sent=${soNo}`);
+  redirect(`/shipments?sent=${soNo}`);
 }
 
 export default async function SubmitPage({
   searchParams,
 }: {
-  searchParams: Promise<{ done?: string; mode?: string; sent?: string; copy?: string; from?: string }>;
+  searchParams: Promise<{ done?: string; mode?: string; copy?: string; from?: string }>;
 }) {
   const user = await requirePermPage("order.submit");
-  const { done, mode, sent, copy, from } = await searchParams;
+  const { done, mode, copy, from } = await searchParams;
   const ship = mode === "ship";
   const partners = await query<{ id: number; name: string }>("select id, name from partners order by name");
   const customers = await query<{ id: number; name: string }>(
@@ -126,15 +126,11 @@ export default async function SubmitPage({
     : [];
   const parent = from ? contracts.find((c) => c.id === Number(from)) : undefined;
   const parentLines = parent ? (await contractRemaining(parent.id)).filter((l) => Number(l.remaining) > 0) : [];
-  const myShips = await query(
-    `select so.id, so.so_no, so.status, so.urgent, so.created_at, so.due_date, so.ecount_slip_no, p.name as customer,
-            (select so_no from sales_orders where id = so.parent_so_id) as parent_no,
-            (select string_agg(i.name || ' ' || trim_scale(l.qty)::text || i.unit, ', ' order by l.id)
-               from sales_order_lines l join items i on i.id = l.item_id where l.so_id = so.id) as summary
-       from sales_orders so join partners p on p.id = so.customer_id
-      where so.created_by = $1 and so.kind = 'ship_request' order by so.created_at desc limit 10`,
+  const shipCount = (await one<{ active: number; late: number }>(
+    `select count(*)::int as active, (count(*) filter (where due_date < current_date))::int as late from sales_orders
+      where created_by = $1 and kind = 'ship_request' and status not in ('shipped','cancelled')`,
     [user.id],
-  );
+  ))!;
   const mine = await query(
     `select i.id, i.channel, i.direction, i.raw_text, i.received_at, i.status, i.ai_draft, i.linked_doc_type, i.linked_doc_id,
             coalesce(po.status, so.status) as doc_status, coalesce(po.po_no, so.so_no) as doc_no,
@@ -158,10 +154,15 @@ export default async function SubmitPage({
           ? "어느 거래처에 어떤 품목을 몇 개 납품할지 직접 골라 보내세요. 바로 출하 지시로 등록되어 재고 확인과 출고로 넘어갑니다."
           : "거래처에게 받은 카톡·문자·메일을 그대로 붙여 넣거나 캡처 사진을 올리세요. 수발주 담당자가 확인 후 처리합니다."}
       </p>
-      {ship && sent && (
-        <div className="panel" style={{ borderColor: "var(--ok)" }}>
-          <b>출하 지시 {sent}가 등록되었습니다.</b> 아래에서 진행 상황을 볼 수 있어요.
-        </div>
+      {ship && (
+        <Link href="/shipments" className="panel ship-summary">
+          <span>
+            <b>내 출하 현황</b>
+            <span className="muted"> · 진행 중 {shipCount.active}건</span>
+            {shipCount.late > 0 && <span className="badge bad" style={{ marginLeft: 6 }}>지연 {shipCount.late}건</span>}
+          </span>
+          <span>보기 →</span>
+        </Link>
       )}
       {ship && parent && (
         <form action={shipFromOrder} className="panel">
@@ -226,28 +227,6 @@ export default async function SubmitPage({
           <label className="chip" style={{ marginTop: 8 }}><input type="checkbox" name="urgent" /> 긴급</label>
           <button className="block" style={{ marginTop: 16 }}>출하 지시 보내기</button>
         </form>
-      )}
-      {ship && (
-        <>
-          <h2>내 출하 지시</h2>
-          <div className="cards">
-            {myShips.map((m) => (
-              <div key={String(m.id)} className="panel">
-                <div className="actions" style={{ justifyContent: "space-between" }}>
-                  <span><b>{String(m.so_no)}</b> {m.urgent ? <span className="badge bad">긴급</span> : null}</span>
-                  <span className="muted" style={{ fontSize: 12 }}>{dateTime(m.created_at)}</span>
-                </div>
-                <div style={{ marginTop: 8 }}>{String(m.customer)} · {String(m.summary ?? "")}</div>
-                {m.parent_no ? <div className="muted" style={{ fontSize: 12 }}>{String(m.parent_no)}에서 분할</div> : null}
-                <div style={{ marginTop: 8 }}>
-                  <FlowSteps compact flow={soFlow(String(m.status), false, m.ecount_slip_no as string | null)} />
-                </div>
-                <Link href={`/submit?mode=ship&copy=${m.id}`}>같은 내용으로 다시 보내기</Link>
-              </div>
-            ))}
-            {myShips.length === 0 && <p className="muted">아직 보낸 출하 지시가 없습니다.</p>}
-          </div>
-        </>
       )}
       {!ship && (<>
 

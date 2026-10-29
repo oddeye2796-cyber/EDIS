@@ -7,6 +7,7 @@ import { logout } from "./actions";
 import { navByRole } from "@/lib/nav";
 import { Suspense } from "react";
 import ErrorBanner from "@/components/ErrorBanner";
+import { flagLateShips, visibleNotice } from "@/lib/shipments";
 
 export const metadata: Metadata = { title: "휴럼 EDIS 수발주", description: "수발주 업무 자동화 데모" };
 export const viewport: Viewport = { width: "device-width", initialScale: 1 };
@@ -14,11 +15,9 @@ export const dynamic = "force-dynamic";
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const user = await currentUser();
+  if (user?.role === "sales") await flagLateShips(user.id);
   const unread = user
-    ? await one<{ n: number }>(
-        "select count(*)::int as n from notifications where not read and (user_role is null or user_role = $1)",
-        [user.role],
-      )
+    ? await one<{ n: number }>(`select count(*)::int as n from notifications where not read and ${visibleNotice}`, [user.role, user.id])
     : undefined;
   return (
     <html lang="ko">

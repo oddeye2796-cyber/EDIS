@@ -91,3 +91,16 @@ select so.id, i.id, 1500, 7600 from so, items i where i.code = 'FG-003';
 insert into status_logs (doc_type, doc_id, from_status, to_status, actor_id, memo)
 select 'so', id, null, status, created_by, case when parent_so_id is null then '데모 데이터' else '최영업님 출하 지시 (SO-DEMO-003에서 분할)' end
   from sales_orders where so_no in ('SO-DEMO-003','SO-DEMO-004');
+
+-- 납기가 지난 출하 지시 (영업 화면의 지연 알림 시연용)
+with so as (
+  insert into sales_orders (so_no, customer_id, status, order_date, due_date, created_by, kind, memo)
+  values ('SO-DEMO-005', (select id from partners where name = '쿠팡'), 'confirmed', current_date - 6, current_date - 1, 4, 'ship_request', '로켓배송 재입고')
+  returning id
+)
+insert into sales_order_lines (so_id, item_id, qty, unit_price)
+select so.id, i.id, 400, 9800 from so, items i where i.code = 'FG-004';
+insert into status_logs (doc_type, doc_id, from_status, to_status, actor_id, memo, at)
+select 'so', id, null, 'received', 4, '최영업님 출하 지시', now() - interval '6 days' from sales_orders where so_no = 'SO-DEMO-005'
+union all
+select 'so', id, 'received', 'confirmed', 3, '재고 확인 후 수주 확정, 출고 준비를 요청합니다.', now() - interval '5 days' from sales_orders where so_no = 'SO-DEMO-005';
