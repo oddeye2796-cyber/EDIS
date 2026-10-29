@@ -1,9 +1,9 @@
-import "./globals.css";
+import "../globals.css";
 import Link from "next/link";
 import type { Metadata, Viewport } from "next";
 import { currentUser, roleLabel } from "@/lib/auth";
 import { one } from "@/lib/db";
-import { logout } from "./actions";
+import { logout } from "../actions";
 import { navByRole } from "@/lib/nav";
 import { Suspense } from "react";
 import ErrorBanner from "@/components/ErrorBanner";

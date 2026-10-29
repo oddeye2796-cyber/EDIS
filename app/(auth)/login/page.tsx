@@ -1,6 +1,6 @@
 import { query } from "@/lib/db";
 import { roleLabel, type User } from "@/lib/auth";
-import { login } from "../actions";
+import { login } from "../../actions";
 
 export default async function LoginPage() {
   const users = await query<User>("select id, name, email, role from users order by id");
