@@ -61,9 +61,9 @@ export default async function Dashboard() {
 
   const stats: [string, number, string][] = [
     ["처리 전 주문", c?.inbox ?? 0, "/inbox"],
-    ["오피스 승인 대기", c?.pending ?? 0, "/purchase"],
-    ["공장 확인 대기", c?.factory ?? 0, "/purchase"],
-    ["입고 예정 발주", c?.incoming ?? 0, "/purchase"],
+    ["오피스 승인 대기", c?.pending ?? 0, "/purchase?status=pending_approval"],
+    ["공장 확인 대기", c?.factory ?? 0, "/purchase?status=approved"],
+    ["입고 예정 발주", c?.incoming ?? 0, "/purchase?status=sent,partially_received"],
     ["진행 중 수주", c?.open_so ?? 0, "/sales"],
     ["90일 내 유통기한 로트", c?.expiring ?? 0, "/lots"],
   ];
@@ -72,8 +72,6 @@ export default async function Dashboard() {
     <>
       <h1 style={{ marginBottom: 16 }}>대시보드</h1>
       <div className="panel">
-        <div className="flow-title">AUTOMATION FLOW</div>
-        <h2>자동화는 이렇게 처리됩니다</h2>
         <p className="muted" style={{ marginTop: 0 }}>주황색 숫자는 지금 그 단계에 머물러 있는 건수입니다.</p>
         <div style={{ marginBottom: 8 }}><b>수주 (고객 주문)</b></div>
         <FlowSteps flow={{ steps: soSteps, current: -1, tone: "active" }} counts={soCounts} />

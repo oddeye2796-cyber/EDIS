@@ -1,21 +1,31 @@
 import Link from "next/link";
 import { query } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
-import { date, won } from "@/lib/labels";
+import { date, poStatus, won } from "@/lib/labels";
 import StatusBadge, { DueBadge } from "@/components/StatusBadge";
 
-export default async function PurchaseList() {
+export default async function PurchaseList({ searchParams }: { searchParams: Promise<{ status?: string }> }) {
   await requireUser();
+  const filter = ((await searchParams).status ?? "").split(",").filter((v) => v in poStatus);
   const rows = await query(
     `select po.*, p.name as supplier,
             (select coalesce(sum(qty * unit_price),0) from purchase_order_lines where po_id = po.id) as total
        from purchase_orders po join partners p on p.id = po.supplier_id
+      where cardinality($1::text[]) = 0 or po.status = any($1)
       order by (po.urgent and po.status not in ('received','cancelled','rejected')) desc, po.created_at desc`,
+    [filter],
   );
   return (
     <>
       <div className="topbar">
-        <h1>발주 (매입)</h1>
+        <h1>
+          발주 (매입)
+          {filter.length > 0 && (
+            <span className="muted" style={{ fontSize: 14, fontWeight: 400, marginLeft: 8 }}>
+              {filter.map((f) => poStatus[f]).join(", ")} · <Link href="/purchase">전체 보기</Link>
+            </span>
+          )}
+        </h1>
         <Link className="btn" href="/purchase/new">발주서 작성</Link>
       </div>
       <div className="panel">

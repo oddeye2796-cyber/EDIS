@@ -66,6 +66,8 @@ button.block { width: 100%; padding: 12px; font-size: 16px; }
 .cards .panel { margin-bottom: 8px; }
 .panel { overflow-x: auto; }
 .side .links { display: block; }
+.side .group { margin-bottom: 10px; }
+.side .group-title { font-size: 11px; font-weight: 600; letter-spacing: .04em; color: #6b7280; padding: 6px 20px 2px; }
 
 @media (max-width: 768px) {
   body { font-size: 15px; }
@@ -74,6 +76,9 @@ button.block { width: 100%; padding: 12px; font-size: 16px; }
   .side .brand { padding: 0 16px 8px; font-size: 16px; }
   .side .brand small { display: inline; margin-left: 8px; }
   .side .links { display: flex; overflow-x: auto; white-space: nowrap; }
+  .side .group { display: flex; align-items: center; margin: 0; border-left: 1px solid #374151; }
+  .side .group:first-child { border-left: 0; }
+  .side .group-title { padding: 0 4px 0 12px; }
   .side a { padding: 8px 12px; }
   .main { padding: 16px; }
   .topbar { flex-wrap: wrap; gap: 8px; }

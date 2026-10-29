@@ -56,11 +56,11 @@ export default async function InboxPage() {
     <>
       <h1 style={{ marginBottom: 4 }}>주문 접수함</h1>
       <p className="muted" style={{ marginTop: 0 }}>
-        영업 담당자가 전달한 카톡·문자·메일 원문을 남기면 AI가 거래처, 품목, 수량, 납기를 정리합니다. 관리자는 정리된 초안을 확인하고 발주서나 수주로 확정합니다.
+        영업 담당자가 "주문 올리기"로 보낸 주문이 여기 쌓입니다. AI가 정리한 초안을 확인하고 발주서나 수주로 확정하세요.
       </p>
-      <div className="panel">
-        <h2>새 주문 기록</h2>
-        <form action={addInbox}>
+      <details className="panel">
+        <summary><b>사무실에서 직접 받은 주문 기록하기</b> <span className="muted">(사무실로 바로 온 전화·메일 등)</span></summary>
+        <form action={addInbox} style={{ marginTop: 12 }}>
           <div className="fields">
             <div><label>채널</label>
               <select name="channel">
@@ -86,7 +86,7 @@ export default async function InboxPage() {
           </div>
           <button>기록</button>
         </form>
-      </div>
+      </details>
       <div className="panel">
         <table>
           <thead>
