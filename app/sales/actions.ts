@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { one, query, tx } from "@/lib/db";
 import { guarded } from "@/lib/action";
 import { requirePerm, type Perm } from "@/lib/permissions";
-import { logStatus, nextDocNo, notify } from "@/lib/workflow";
+import { logStatus, nextDocNo, notify, notifyRequester } from "@/lib/workflow";
 import { pushSlip } from "@/lib/ecount";
 import { allocateFEFO, contractRemaining, createShortagePOs, learnAliases, stockFor } from "@/lib/stock";
 import { readLines } from "@/components/OrderForm";
@@ -47,10 +47,11 @@ async function _createSO(formData: FormData) {
   redirect(`/sales/${id}`);
 }
 
-const flow: Record<string, { from: string[]; to: string; perm: Perm; notifyRole?: string; message: string }> = {
-  confirm: { from: ["received"], to: "confirmed", perm: "so.confirm", notifyRole: "factory_manager", message: "재고 확인 후 수주 확정, 출고 준비를 요청합니다." },
-  prepare: { from: ["confirmed"], to: "preparing", perm: "so.prepare", message: "출고 준비를 시작했습니다." },
-  cancel: { from: ["received", "confirmed", "preparing"], to: "cancelled", perm: "so.cancel", message: "취소되었습니다." },
+// salesNote: 출하 지시를 올린 영업 담당자에게 보낼 말
+const flow: Record<string, { from: string[]; to: string; perm: Perm; notifyRoles?: string[]; message: string; salesNote: string }> = {
+  confirm: { from: ["received"], to: "confirmed", perm: "so.confirm", notifyRoles: ["factory_manager"], message: "재고 확인 후 수주 확정, 출고 준비를 요청합니다.", salesNote: "재고 확인이 끝나 확정됐어요. 공장 출고 준비를 기다립니다." },
+  prepare: { from: ["confirmed"], to: "preparing", perm: "so.prepare", notifyRoles: ["staff"], message: "출고 준비를 시작했습니다.", salesNote: "공장에서 출고 준비를 시작했어요." },
+  cancel: { from: ["received", "confirmed", "preparing"], to: "cancelled", perm: "so.cancel", notifyRoles: ["staff", "factory_manager"], message: "취소되었습니다.", salesNote: "사무실에서 취소했어요." },
 };
 
 export async function transitionSO(formData: FormData) {
@@ -68,7 +69,10 @@ async function _transitionSO(formData: FormData) {
     if (!so || !t.from.includes(so.status)) throw new Error("이미 다른 단계로 넘어간 문서입니다. 화면을 새로 고쳐 지금 상태를 확인하세요.");
     await c.query("update sales_orders set status = $2 where id = $1", [id, t.to]);
     await logStatus(c, "so", id, so.status, t.to, user.id, t.message);
-    if (t.notifyRole) await notify(c, t.notifyRole, `수주 ${so.so_no}: ${t.message}`, `/sales/${id}`);
+    for (const r of t.notifyRoles ?? []) {
+      if (r !== user.role) await notify(c, r, `수주 ${so.so_no}: ${t.message}`, `/sales/${id}`);
+    }
+    await notifyRequester(c, id, `출하 지시 ${so.so_no}: ${t.salesNote}`);
   });
   revalidatePath(`/sales/${id}`);
 }
@@ -136,6 +140,7 @@ async function _shipSO(formData: FormData) {
     const next = remain[0].n === 0 ? "shipped" : "partially_shipped";
     await c.query("update sales_orders set status = $2 where id = $1", [id, next]);
     await logStatus(c, "so", id, so.status, next, user.id, "출고 처리");
+    await notifyRequester(c, id, next === "shipped" ? `출하 지시 ${so.so_no}: 출고가 끝났어요.` : `출하 지시 ${so.so_no}: 일부 출고됐어요. 나머지는 이어서 출고합니다.`);
     if (next === "shipped") {
       const { rows: lines } = await c.query(
         `select i.ecount_code as item_code, l.shipped_qty as qty, l.unit_price
@@ -189,6 +194,7 @@ async function _orderShortage(formData: FormData) {
       await logStatus(c, "so", id, row.status, row.status, user.id, `공장에 생산 요청: ${what}`);
       await notify(c, "factory_manager", `수주 ${row.so_no} 완제품 부족, 생산 요청: ${what}`, `/sales/${id}`);
     }
+    await notifyRequester(c, id, `출하 지시 ${row.so_no}: 재고가 부족해 ${toMake.length ? "생산" : "원료 발주"}를 요청했어요. 납기가 늦어질 수 있어요.`);
   });
   revalidatePath(`/sales/${id}`);
 }
@@ -241,5 +247,5 @@ async function _shipFromOrder(formData: FormData) {
     await notify(c, "staff", msg, `/sales/${soId}`);
     return soNo;
   });
-  redirect(`/submit?mode=ship&sent=${soNo}`);
+  redirect(`/shipments?sent=${soNo}`);
 }

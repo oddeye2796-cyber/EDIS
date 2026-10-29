@@ -5,7 +5,7 @@ export type NavGroup = { title: string; links: [label: string, href: string][] }
 
 export const navByRole: Record<Role, NavGroup[]> = {
   sales: [
-    { title: "영업", links: [["주문 올리기", "/submit"], ["출하 지시", "/submit?mode=ship"]] },
+    { title: "영업", links: [["주문 올리기", "/submit"], ["출하 지시", "/submit?mode=ship"], ["내 출하 현황", "/shipments"], ["알림", "/notifications"]] },
   ],
   executive: [
     { title: "경영", links: [["경영 현황", "/exec"], ["리포트", "/report"]] },

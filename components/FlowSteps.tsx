@@ -1,7 +1,11 @@
+import Link from "next/link";
 import type { FlowState } from "@/lib/flow";
 
+// 단계 칩을 누르면 갈 화면. href가 없으면 누를 수 없고, note를 마우스를 올렸을 때 보여줍니다.
+export type StepLink = { href?: string; note?: string };
+
 // 단계 칩을 선으로 이은 진행 바. 끝난 단계는 체크, 현재 단계는 강조, 남은 단계는 흐리게 표시합니다.
-export default function FlowSteps({ flow, compact = false, counts }: { flow: FlowState; compact?: boolean; counts?: number[] }) {
+export default function FlowSteps({ flow, compact = false, counts, links }: { flow: FlowState; compact?: boolean; counts?: number[]; links?: StepLink[] }) {
   if (compact) return <FlowMini flow={flow} />;
   return (
     <ol className={`flow${counts ? " overview" : ""}`}>
@@ -9,8 +13,9 @@ export default function FlowSteps({ flow, compact = false, counts }: { flow: Flo
         const state = flow.current < 0
           ? (counts?.[i] ? "waiting" : "plain")
           : i < flow.current ? "done" : i === flow.current ? (flow.tone === "stopped" ? "stopped" : "current") : "todo";
-        return (
-          <li key={label} className={`flow-step ${state}`}>
+        const link = links?.[i];
+        const body = (
+          <>
             <span className="flow-num">{state === "done" ? "✓" : state === "stopped" ? "!" : i + 1}</span>
             <span className="flow-label">
               {label}
@@ -18,6 +23,11 @@ export default function FlowSteps({ flow, compact = false, counts }: { flow: Flo
               {state === "stopped" && <span className="flow-now">{flow.note}</span>}
             </span>
             {counts && counts[i] > 0 && <span className="flow-count">{counts[i]}</span>}
+          </>
+        );
+        return (
+          <li key={label} className={`flow-step ${state}${link ? (link.href ? " linked" : " locked") : ""}`} title={link?.note}>
+            {link?.href ? <Link href={link.href} className="flow-link">{body}</Link> : body}
           </li>
         );
       })}

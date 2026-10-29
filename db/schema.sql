@@ -212,3 +212,10 @@ create table if not exists monthly_results (
   orders int not null,
   on_time_rate numeric(5,1)
 );
+
+-- 개인 알림: user_id가 있으면 그 사람에게만 보입니다 (영업 담당자의 출하 지시 진행·지연 알림).
+alter table notifications add column if not exists user_id int references users(id);
+-- 출하 지시 납기 지연 알림을 한 번만 보내기 위한 표시
+alter table sales_orders add column if not exists late_notified boolean not null default false;
+alter table purchase_orders add column if not exists late_notified boolean not null default false;
+alter table purchase_orders add column if not exists stale_notified boolean not null default false;

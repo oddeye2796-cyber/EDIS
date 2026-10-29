@@ -48,16 +48,17 @@ async function _createPO(formData: FormData) {
   redirect(`/purchase/${id}`);
 }
 
+// notifyRoles: 이 단계가 끝나면 다음 일을 하거나 알아야 하는 역할
 const transitions: Record<
   string,
-  { from: string[]; to: string; perm: Perm; stamp?: string; notifyRole?: Role; message: string }
+  { from: string[]; to: string; perm: Perm; stamp?: string; notifyRoles?: Role[]; message: string }
 > = {
-  approve: { from: ["pending_approval"], to: "approved", perm: "po.approve", stamp: "approved", notifyRole: "factory_manager", message: "오피스 승인 완료, 공장 확인을 요청합니다." },
-  reject: { from: ["pending_approval", "approved"], to: "rejected", perm: "po.reject", message: "반려되었습니다." },
-  confirm: { from: ["approved"], to: "confirmed", perm: "po.confirm", stamp: "confirmed", notifyRole: "office_admin", message: "공장 확인 완료, 공급사에 발송할 수 있습니다." },
-  send: { from: ["confirmed"], to: "sent", perm: "po.send", message: "공급사에 발주서를 발송했습니다." },
-  cancel: { from: ["pending_approval", "approved", "confirmed", "sent"], to: "cancelled", perm: "po.cancel", message: "취소되었습니다." },
-  resubmit: { from: ["rejected"], to: "pending_approval", perm: "po.resubmit", notifyRole: "office_admin", message: "다시 승인을 요청합니다." },
+  approve: { from: ["pending_approval"], to: "approved", perm: "po.approve", stamp: "approved", notifyRoles: ["factory_manager", "staff"], message: "오피스 승인 완료, 공장 확인을 요청합니다." },
+  reject: { from: ["pending_approval", "approved"], to: "rejected", perm: "po.reject", notifyRoles: ["staff", "office_admin"], message: "반려되었습니다." },
+  confirm: { from: ["approved"], to: "confirmed", perm: "po.confirm", stamp: "confirmed", notifyRoles: ["staff", "office_admin"], message: "공장 확인 완료, 공급사에 발송할 수 있습니다." },
+  send: { from: ["confirmed"], to: "sent", perm: "po.send", notifyRoles: ["factory_manager"], message: "공급사에 발주서를 발송했습니다. 입고를 준비해 주세요." },
+  cancel: { from: ["pending_approval", "approved", "confirmed", "sent"], to: "cancelled", perm: "po.cancel", notifyRoles: ["staff", "factory_manager"], message: "취소되었습니다." },
+  resubmit: { from: ["rejected"], to: "pending_approval", perm: "po.resubmit", notifyRoles: ["office_admin"], message: "다시 승인을 요청합니다." },
 };
 
 const STALE = "이미 다른 단계로 넘어간 문서입니다. 화면을 새로 고쳐 지금 상태를 확인하세요.";
@@ -91,7 +92,11 @@ async function _transitionPO(formData: FormData) {
     );
     if (via && t.to === "sent") await c.query("update purchase_orders set sent_via = $2, sent_to = $3 where id = $1", [id, via, to]);
     await logStatus(c, "po", id, po.status, t.to, user.id, memo || t.message);
-    if (t.notifyRole) await notify(c, t.notifyRole, `발주서 ${po.po_no}: ${t.message}`, `/purchase/${id}`);
+    // 반려·취소 사유가 있으면 알림에도 붙입니다. 처리한 사람의 역할에는 다시 알리지 않습니다.
+    const why = memo && t.to !== "sent" ? ` (${memo})` : "";
+    for (const r of t.notifyRoles ?? []) {
+      if (r !== user.role) await notify(c, r, `발주서 ${po.po_no}: ${t.message}${why}`, `/purchase/${id}`);
+    }
   });
   revalidatePath(`/purchase/${id}`);
 }

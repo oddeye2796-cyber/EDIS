@@ -35,8 +35,10 @@ async function ignoreInbox(formData: FormData) {
   revalidatePath("/inbox");
 }
 
-export default async function InboxPage() {
+export default async function InboxPage({ searchParams }: { searchParams: Promise<{ dir?: string }> }) {
   await requirePermPage("inbox.manage");
+  const dirParam = (await searchParams).dir;
+  const dir = dirParam === "sales" || dirParam === "purchase" ? dirParam : "";
   const partners = await query<{ id: number; name: string; type: string }>(
     "select id, name, type from partners order by name",
   );
@@ -52,12 +54,16 @@ export default async function InboxPage() {
        from order_inbox i
        left join partners p on p.id = i.partner_id
        left join users u on u.id = i.received_by
+      where $1 = '' or i.direction = $1
       order by (i.status = 'new') desc, (i.status = 'new' and i.urgent) desc, i.received_at desc
       limit 100`,
+    [dir],
   );
   return (
     <>
-      <h1 style={{ marginBottom: 4 }}>주문 접수함</h1>
+      <h1 style={{ marginBottom: 4 }}>
+        주문 접수함{dir && <> · {dir === "sales" ? "고객 주문 (수주)" : "원부재료 구매 (발주)"} <Link href="/inbox" style={{ fontSize: 14, fontWeight: 400 }}>전체 보기</Link></>}
+      </h1>
       <p className="muted" style={{ marginTop: 0 }}>
         영업 담당자가 "주문 올리기"로 보낸 주문이 여기 쌓입니다. AI가 정리한 초안을 확인하고 발주서나 수주로 확정하세요.
       </p>
