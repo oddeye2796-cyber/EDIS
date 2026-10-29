@@ -218,3 +218,17 @@ button.link { background: none; border: none; color: inherit; padding: 0 2px; cu
 .ship-line-row .bar { grid-column: 1 / -1; height: 5px; border-radius: 3px; background: #e5e7eb; overflow: hidden; }
 .ship-line-row .bar span { display: block; height: 100%; background: var(--ok); }
 .ship-foot { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; margin-top: 10px; font-size: 12px; }
+.notice.bad a { color: var(--bad); }
+.notice.ok a { color: var(--ok); }
+.notice-list { margin: 0; padding-left: 18px; }
+.notice-list li { margin: 4px 0; }
+.notice-list li.bad a { color: var(--bad); }
+.notice-list li.ok a { color: var(--ok); }
+.ship-block { border: 1px solid var(--line); border-radius: 10px; padding: 12px; margin: 12px 0 0; min-width: 0; }
+.ship-block-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+.ship-block select, .ship-block input { font-size: 16px; }
+.ship-line.with-btn { grid-template-columns: 1fr 96px 36px; align-items: center; }
+.round-btn { width: 36px; height: 36px; padding: 0; border-radius: 50%; background: #fff; color: var(--text); border: 1px solid var(--line); font-size: 18px; line-height: 1; }
+.round-btn:disabled { opacity: .35; cursor: default; }
+.add-btn { background: none; border: 1px dashed var(--accent); color: var(--accent); width: 100%; padding: 8px; border-radius: 8px; font-weight: 600; }
+.link-btn { background: none; border: none; color: var(--bad); padding: 0; font-size: 13px; }

@@ -48,10 +48,10 @@ async function _createSO(formData: FormData) {
 }
 
 // salesNote: 출하 지시를 올린 영업 담당자에게 보낼 말
-const flow: Record<string, { from: string[]; to: string; perm: Perm; notifyRole?: string; message: string; salesNote: string }> = {
-  confirm: { from: ["received"], to: "confirmed", perm: "so.confirm", notifyRole: "factory_manager", message: "재고 확인 후 수주 확정, 출고 준비를 요청합니다.", salesNote: "재고 확인이 끝나 확정됐어요. 공장 출고 준비를 기다립니다." },
-  prepare: { from: ["confirmed"], to: "preparing", perm: "so.prepare", message: "출고 준비를 시작했습니다.", salesNote: "공장에서 출고 준비를 시작했어요." },
-  cancel: { from: ["received", "confirmed", "preparing"], to: "cancelled", perm: "so.cancel", message: "취소되었습니다.", salesNote: "사무실에서 취소했어요." },
+const flow: Record<string, { from: string[]; to: string; perm: Perm; notifyRoles?: string[]; message: string; salesNote: string }> = {
+  confirm: { from: ["received"], to: "confirmed", perm: "so.confirm", notifyRoles: ["factory_manager"], message: "재고 확인 후 수주 확정, 출고 준비를 요청합니다.", salesNote: "재고 확인이 끝나 확정됐어요. 공장 출고 준비를 기다립니다." },
+  prepare: { from: ["confirmed"], to: "preparing", perm: "so.prepare", notifyRoles: ["staff"], message: "출고 준비를 시작했습니다.", salesNote: "공장에서 출고 준비를 시작했어요." },
+  cancel: { from: ["received", "confirmed", "preparing"], to: "cancelled", perm: "so.cancel", notifyRoles: ["staff", "factory_manager"], message: "취소되었습니다.", salesNote: "사무실에서 취소했어요." },
 };
 
 export async function transitionSO(formData: FormData) {
@@ -69,7 +69,9 @@ async function _transitionSO(formData: FormData) {
     if (!so || !t.from.includes(so.status)) throw new Error("이미 다른 단계로 넘어간 문서입니다. 화면을 새로 고쳐 지금 상태를 확인하세요.");
     await c.query("update sales_orders set status = $2 where id = $1", [id, t.to]);
     await logStatus(c, "so", id, so.status, t.to, user.id, t.message);
-    if (t.notifyRole) await notify(c, t.notifyRole, `수주 ${so.so_no}: ${t.message}`, `/sales/${id}`);
+    for (const r of t.notifyRoles ?? []) {
+      if (r !== user.role) await notify(c, r, `수주 ${so.so_no}: ${t.message}`, `/sales/${id}`);
+    }
     await notifyRequester(c, id, `출하 지시 ${so.so_no}: ${t.salesNote}`);
   });
   revalidatePath(`/sales/${id}`);

@@ -4,7 +4,7 @@ import { query } from "@/lib/db";
 import { requirePermPage } from "@/lib/permissions";
 import { requireUser } from "@/lib/auth";
 import { daysUntil, dateTime } from "@/lib/labels";
-import { flagLateShips, visibleNotice } from "@/lib/shipments";
+import { noticeTone, visibleNotice } from "@/lib/alerts";
 
 async function markSeen() {
   "use server";
@@ -56,7 +56,6 @@ export default async function ShipmentsPage({ searchParams }: { searchParams: Pr
   const user = await requirePermPage("order.submit");
   const { f, sent } = await searchParams;
   const filter = filters.some(([k]) => k === f) ? f! : "active";
-  await flagLateShips(user.id);
 
   const all = await query<Ship>(
     `select so.id, so.so_no, so.status, so.urgent, so.due_date, so.memo, so.created_at, p.name as customer,
@@ -124,7 +123,7 @@ export default async function ShipmentsPage({ searchParams }: { searchParams: Pr
           </div>
           <ul>
             {news.map((n) => (
-              <li key={n.id} className={n.message.includes("지났") || n.message.includes("늦어질") ? "bad" : n.message.includes("끝났") ? "ok" : ""}>
+              <li key={n.id} className={noticeTone(n.message)}>
                 {n.message} <span className="muted">· {dateTime(n.created_at)}</span>
               </li>
             ))}

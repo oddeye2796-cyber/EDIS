@@ -6,6 +6,7 @@ import StatusBadge, { DueBadge } from "@/components/StatusBadge";
 import { redirect } from "next/navigation";
 import FlowSteps, { type StepLink } from "@/components/FlowSteps";
 import { can, whoCan, type Perm } from "@/lib/permissions";
+import { noticeTone, visibleNotice } from "@/lib/alerts";
 import { poSteps, soSteps } from "@/lib/flow";
 
 export default async function Dashboard() {
@@ -76,6 +77,11 @@ export default async function Dashboard() {
   const poLinks = [poInbox, poInbox, poInbox, step("/purchase?status=pending_approval"), step("/purchase?status=approved"),
     step("/purchase?status=confirmed"), step("/purchase?status=sent,partially_received"), ecount];
 
+  const notices = await query<{ id: number; message: string; created_at: Date }>(
+    `select id, message, created_at from notifications where not read and ${visibleNotice} order by created_at desc limit 5`,
+    [user.role, user.id],
+  );
+
   const stats: [string, number, string][] = [
     ["처리 전 주문", c?.inbox ?? 0, can(user.role, "inbox.manage") ? "/inbox" : ""],
     ["오피스 승인 대기", c?.pending ?? 0, "/purchase?status=pending_approval"],
@@ -88,6 +94,21 @@ export default async function Dashboard() {
   return (
     <>
       <h1 style={{ marginBottom: 16 }}>대시보드</h1>
+      {notices.length > 0 && (
+        <div className="panel news">
+          <div className="actions" style={{ justifyContent: "space-between" }}>
+            <b>새 알림</b>
+            <Link href="/notifications">알림 전체 보기</Link>
+          </div>
+          <ul className="notice-list" style={{ marginTop: 8 }}>
+            {notices.map((n) => (
+              <li key={n.id} className={noticeTone(n.message)}>
+                <Link prefetch={false} href={`/notifications/open?id=${n.id}`}>{n.message}</Link> <span className="muted">· {dateTime(n.created_at)}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
       <div className="panel">
         <p className="muted" style={{ marginTop: 0 }}>주황색 숫자는 지금 그 단계에 머물러 있는 건수입니다. 단계를 누르면 해당 목록으로 이동합니다.</p>
         <div style={{ marginBottom: 8 }}><b>수주 (고객 주문)</b></div>
