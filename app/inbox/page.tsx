@@ -3,15 +3,25 @@ import { revalidatePath } from "next/cache";
 import { query } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
 import { channelLabel, dateTime } from "@/lib/labels";
+import { draftInbox } from "@/lib/inbox";
+import type { Draft } from "@/lib/extract";
 
 async function addInbox(formData: FormData) {
   "use server";
   const user = await requireUser();
   const partnerId = Number(formData.get("partner_id")) || null;
-  await query(
-    "insert into order_inbox (channel, direction, partner_id, raw_text, received_by) values ($1,$2,$3,$4,$5)",
+  const [row] = await query<{ id: number }>(
+    "insert into order_inbox (channel, direction, partner_id, raw_text, received_by) values ($1,$2,$3,$4,$5) returning id",
     [formData.get("channel"), formData.get("direction"), partnerId, String(formData.get("raw_text")).trim(), user.id],
   );
+  await draftInbox(row.id);
+  revalidatePath("/inbox");
+}
+
+async function redraft(formData: FormData) {
+  "use server";
+  await requireUser();
+  await draftInbox(Number(formData.get("id")));
   revalidatePath("/inbox");
 }
 
@@ -28,7 +38,9 @@ export default async function InboxPage() {
     "select id, name, type from partners order by name",
   );
   const rows = await query(
-    `select i.*, p.name as partner_name, u.name as receiver
+    `select i.id, i.channel, i.direction, i.raw_text, i.received_at, i.status, i.linked_doc_type, i.linked_doc_id,
+            i.ai_draft, i.ai_error, i.sales_note, (i.image is not null) as has_image,
+            p.name as partner_name, u.name as receiver
        from order_inbox i
        left join partners p on p.id = i.partner_id
        left join users u on u.id = i.received_by
@@ -39,7 +51,7 @@ export default async function InboxPage() {
     <>
       <h1 style={{ marginBottom: 4 }}>주문 접수함</h1>
       <p className="muted" style={{ marginTop: 0 }}>
-        이메일, 카톡, 문자, 전화로 받은 주문을 원문 그대로 먼저 남기고, 발주서나 수주로 바꿉니다.
+        영업 담당자가 전달한 카톡·문자·메일 원문을 남기면 AI가 거래처, 품목, 수량, 납기를 정리합니다. 관리자는 정리된 초안을 확인하고 발주서나 수주로 확정합니다.
       </p>
       <div className="panel">
         <h2>새 주문 기록</h2>
@@ -73,19 +85,38 @@ export default async function InboxPage() {
       <div className="panel">
         <table>
           <thead>
-            <tr><th>받은 시각</th><th>채널</th><th>구분</th><th>거래처</th><th>원문</th><th>상태</th><th /></tr>
+            <tr><th>받은 시각</th><th>채널</th><th>구분</th><th>거래처</th><th>원문</th><th>AI 정리</th><th>상태</th><th /></tr>
           </thead>
           <tbody>
             {rows.map((r) => {
               const isNew = r.status === "new";
-              const target = r.direction === "sales" ? "sales" : "purchase";
+              const draft = r.ai_draft as Draft | null;
+              const dir = draft && draft.direction !== "unknown" ? draft.direction : String(r.direction);
+              const target = dir === "sales" ? "sales" : "purchase";
               return (
                 <tr key={String(r.id)}>
                   <td>{dateTime(r.received_at)}<div className="muted">{String(r.receiver ?? "")}</div></td>
                   <td><span className="badge info">{channelLabel[String(r.channel)]}</span></td>
                   <td>{r.direction === "sales" ? "수주" : "발주"}</td>
                   <td>{String(r.partner_name ?? "-")}</td>
-                  <td style={{ maxWidth: 360 }}><div className="raw">{String(r.raw_text)}</div></td>
+                  <td style={{ maxWidth: 320 }}>
+                    <div className="raw">{String(r.raw_text)}</div>
+                    {r.has_image ? (
+                      <a href={`/api/inbox/${r.id}/image`} target="_blank">
+                        <img src={`/api/inbox/${r.id}/image`} alt="주문 캡처" style={{ maxWidth: 160, marginTop: 6, borderRadius: 6, border: "1px solid var(--line)" }} />
+                      </a>
+                    ) : null}
+                    {r.sales_note ? <div className="muted">메모: {String(r.sales_note)}</div> : null}
+                  </td>
+                  <td style={{ maxWidth: 280 }}>
+                    <DraftCell draft={r.ai_draft as Draft | null} error={r.ai_error as string | null} />
+                    {isNew && (
+                      <form action={redraft} style={{ marginTop: 6 }}>
+                        <input type="hidden" name="id" value={String(r.id)} />
+                        <button className="secondary">다시 정리</button>
+                      </form>
+                    )}
+                  </td>
                   <td>
                     {isNew ? <span className="badge warn">처리 전</span>
                       : r.status === "converted" ? (
@@ -98,7 +129,7 @@ export default async function InboxPage() {
                     {isNew && (
                       <div className="actions">
                         <Link className="btn" href={`/${target}/new?inbox=${r.id}`}>
-                          {r.direction === "sales" ? "수주로 등록" : "발주서 작성"}
+                          {target === "sales" ? "수주로 등록" : "발주서 작성"}
                         </Link>
                         <form action={ignoreInbox} className="inline">
                           <input type="hidden" name="id" value={String(r.id)} />
@@ -110,10 +141,26 @@ export default async function InboxPage() {
                 </tr>
               );
             })}
-            {rows.length === 0 && <tr><td colSpan={7} className="muted">아직 기록된 주문이 없습니다.</td></tr>}
+            {rows.length === 0 && <tr><td colSpan={8} className="muted">아직 기록된 주문이 없습니다.</td></tr>}
           </tbody>
         </table>
       </div>
     </>
+  );
+}
+
+function DraftCell({ draft, error }: { draft: Draft | null; error: string | null }) {
+  if (error) return <span className="badge bad">정리 실패: {error}</span>;
+  if (!draft) return <span className="muted">-</span>;
+  return (
+    <div>
+      <div>{draft.summary}</div>
+      {draft.needs_check.length > 0 && (
+        <ul style={{ margin: "4px 0 0", paddingLeft: 16, color: "var(--warn)" }}>
+          {draft.needs_check.map((n, i) => <li key={i}>{n}</li>)}
+        </ul>
+      )}
+      <div className="muted" style={{ fontSize: 12 }}>{draft.engine === "claude" ? "Claude 정리" : "규칙 기반 정리 (API 키 없음)"}</div>
+    </div>
   );
 }

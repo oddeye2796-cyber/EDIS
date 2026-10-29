@@ -2,7 +2,8 @@
 insert into users (name, email, role) values
   ('김오피스', 'office@edis.demo', 'office_admin'),
   ('박공장', 'factory@edis.demo', 'factory_manager'),
-  ('이담당', 'staff@edis.demo', 'staff')
+  ('이담당', 'staff@edis.demo', 'staff'),
+  ('최영업', 'sales@edis.demo', 'sales')
 on conflict (email) do nothing;
 
 insert into partners (type, name, biz_no, contact_name, phone, email, payment_terms, ecount_code) values

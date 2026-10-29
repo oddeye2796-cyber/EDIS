@@ -4,7 +4,7 @@ create table if not exists users (
   id serial primary key,
   name text not null,
   email text unique not null,
-  role text not null check (role in ('office_admin','factory_manager','staff'))
+  role text not null check (role in ('office_admin','factory_manager','staff','sales'))
 );
 
 create table if not exists partners (
@@ -141,3 +141,14 @@ create table if not exists ecount_sync_logs (
   mock boolean not null default true,
   at timestamptz not null default now()
 );
+
+-- AI 정리 결과 (주문 원문 → 발주/수주 초안)
+alter table order_inbox add column if not exists ai_draft jsonb;
+alter table order_inbox add column if not exists ai_error text;
+
+-- 영업 담당자 역할과 주문 캡처 이미지
+alter table users drop constraint if exists users_role_check;
+alter table users add constraint users_role_check check (role in ('office_admin','factory_manager','staff','sales'));
+alter table order_inbox add column if not exists image bytea;
+alter table order_inbox add column if not exists image_type text;
+alter table order_inbox add column if not exists sales_note text;

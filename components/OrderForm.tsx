@@ -1,3 +1,5 @@
+import type { Draft } from "@/lib/extract";
+
 type Option = { id: number; name: string };
 type Item = { id: number; code: string; name: string; unit: string; default_price: string };
 
@@ -11,6 +13,7 @@ export default function OrderForm({
   inboxId,
   inboxText,
   submitLabel,
+  draft,
 }: {
   action: (formData: FormData) => Promise<void>;
   partnerLabel: string;
@@ -20,24 +23,38 @@ export default function OrderForm({
   inboxId?: number;
   inboxText?: string;
   submitLabel: string;
+  draft?: Draft | null;
 }) {
+  const lines = draft?.lines.filter((l) => l.item_id) ?? [];
   return (
     <form action={action}>
       {inboxId && (
         <div className="panel" style={{ background: "#fafafa" }}>
           <label>접수함 원문</label>
           <div className="raw">{inboxText}</div>
+          {draft && (
+            <div style={{ marginTop: 8 }}>
+              <label>AI 정리 ({draft.engine === "claude" ? "Claude" : "규칙 기반"})</label>
+              <div>{draft.summary}</div>
+              {draft.needs_check.length > 0 && (
+                <ul style={{ margin: "4px 0 0", paddingLeft: 16, color: "var(--warn)" }}>
+                  {draft.needs_check.map((n, i) => <li key={i}>{n}</li>)}
+                </ul>
+              )}
+              <p className="muted" style={{ marginBottom: 0 }}>아래 칸은 AI 정리로 미리 채웠습니다. 확인하고 고친 뒤 확정하세요.</p>
+            </div>
+          )}
           <input type="hidden" name="inbox_id" value={inboxId} />
         </div>
       )}
       <div className="fields">
         <div><label>{partnerLabel}</label>
-          <select name="partner_id" required defaultValue={defaultPartnerId ?? ""}>
+          <select name="partner_id" required defaultValue={draft?.partner_id ?? defaultPartnerId ?? ""}>
             <option value="" disabled>선택</option>
             {partners.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
           </select>
         </div>
-        <div><label>납기일</label><input type="date" name="due_date" required /></div>
+        <div><label>납기일</label><input type="date" name="due_date" required defaultValue={draft?.due_date ?? ""} /></div>
         <div><label>메모</label><input name="memo" /></div>
       </div>
       <table style={{ marginBottom: 12 }}>
@@ -46,15 +63,15 @@ export default function OrderForm({
           {[0, 1, 2, 3, 4].map((i) => (
             <tr key={i}>
               <td>
-                <select name="item_id" defaultValue="">
+                <select name="item_id" defaultValue={lines[i]?.item_id ?? ""}>
                   <option value="">-</option>
                   {items.map((it) => (
                     <option key={it.id} value={it.id}>{it.code} {it.name} ({it.unit})</option>
                   ))}
                 </select>
               </td>
-              <td><input name="qty" type="number" step="0.001" min="0" /></td>
-              <td><input name="unit_price" type="number" step="0.01" min="0" /></td>
+              <td><input name="qty" type="number" step="0.001" min="0" defaultValue={lines[i]?.qty ?? ""} /></td>
+              <td><input name="unit_price" type="number" step="0.01" min="0" defaultValue={lines[i]?.unit_price ?? ""} /></td>
             </tr>
           ))}
         </tbody>

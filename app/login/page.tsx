@@ -12,6 +12,7 @@ export default async function LoginPage() {
         {users.map((u) => (
           <form key={u.id} action={login} style={{ marginBottom: 8 }}>
             <input type="hidden" name="userId" value={u.id} />
+            <input type="hidden" name="role" value={u.role} />
             <button style={{ width: "100%" }}>
               {u.name} · {roleLabel[u.role]}
             </button>

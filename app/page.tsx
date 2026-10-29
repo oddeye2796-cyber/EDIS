@@ -3,9 +3,13 @@ import { one, query } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
 import { channelLabel, date, dateTime } from "@/lib/labels";
 import StatusBadge, { DueBadge } from "@/components/StatusBadge";
+import { redirect } from "next/navigation";
+import FlowSteps from "@/components/FlowSteps";
+import { poSteps, soSteps } from "@/lib/flow";
 
 export default async function Dashboard() {
   const user = await requireUser();
+  if (user.role === "sales") redirect("/submit");
   const c = await one<Record<string, number>>(
     `select
        (select count(*)::int from order_inbox where status = 'new') as inbox,
@@ -26,7 +30,7 @@ export default async function Dashboard() {
      order by due_date`,
   );
   const inbox = await query(
-    `select i.*, p.name as partner from order_inbox i left join partners p on p.id = i.partner_id
+    `select i.id, i.channel, i.raw_text, i.received_at, p.name as partner from order_inbox i left join partners p on p.id = i.partner_id
       where i.status = 'new' order by received_at desc limit 5`,
   );
   const mine =
@@ -38,6 +42,22 @@ export default async function Dashboard() {
         [mine],
       )
     : [];
+
+  // 단계별로 지금 머물러 있는 건수
+  const sc = await one<Record<string, number>>(
+    `select
+       (select count(*)::int from order_inbox where status = 'new' and direction = 'purchase') as po_inbox,
+       (select count(*)::int from order_inbox where status = 'new' and direction = 'sales') as so_inbox,
+       (select count(*)::int from purchase_orders where status = 'pending_approval') as po_approve,
+       (select count(*)::int from purchase_orders where status = 'approved') as po_factory,
+       (select count(*)::int from purchase_orders where status = 'confirmed') as po_send,
+       (select count(*)::int from purchase_orders where status in ('sent','partially_received')) as po_receive,
+       (select count(*)::int from sales_orders where status = 'received') as so_confirm,
+       (select count(*)::int from sales_orders where status = 'confirmed') as so_prepare,
+       (select count(*)::int from sales_orders where status in ('preparing','partially_shipped')) as so_ship`,
+  );
+  const poCounts = [0, 0, sc?.po_inbox ?? 0, sc?.po_approve ?? 0, sc?.po_factory ?? 0, sc?.po_send ?? 0, sc?.po_receive ?? 0, 0];
+  const soCounts = [0, 0, sc?.so_inbox ?? 0, sc?.so_confirm ?? 0, sc?.so_prepare ?? 0, sc?.so_ship ?? 0, 0];
 
   const stats: [string, number, string][] = [
     ["처리 전 주문", c?.inbox ?? 0, "/inbox"],
@@ -51,6 +71,15 @@ export default async function Dashboard() {
   return (
     <>
       <h1 style={{ marginBottom: 16 }}>대시보드</h1>
+      <div className="panel">
+        <div className="flow-title">AUTOMATION FLOW</div>
+        <h2>자동화는 이렇게 처리됩니다</h2>
+        <p className="muted" style={{ marginTop: 0 }}>주황색 숫자는 지금 그 단계에 머물러 있는 건수입니다.</p>
+        <div style={{ marginBottom: 8 }}><b>수주 (고객 주문)</b></div>
+        <FlowSteps flow={{ steps: soSteps, current: -1, tone: "active" }} counts={soCounts} />
+        <div style={{ margin: "16px 0 8px" }}><b>발주 (원부재료 구매)</b></div>
+        <FlowSteps flow={{ steps: poSteps, current: -1, tone: "active" }} counts={poCounts} />
+      </div>
       <div className="grid" style={{ marginBottom: 16 }}>
         {stats.map(([l, n, href]) => (
           <Link key={l} href={href} className="stat" style={{ color: "inherit" }}>

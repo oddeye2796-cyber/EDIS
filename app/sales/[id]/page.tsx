@@ -4,6 +4,8 @@ import { requireUser } from "@/lib/auth";
 import { date, qty, won } from "@/lib/labels";
 import StatusBadge from "@/components/StatusBadge";
 import Timeline from "@/components/Timeline";
+import FlowSteps from "@/components/FlowSteps";
+import { soFlow } from "@/lib/flow";
 import { shipSO, transitionSO } from "../actions";
 
 function ActionButton({ id, action, label, kind }: { id: number; action: string; label: string; kind?: string }) {
@@ -42,6 +44,10 @@ export default async function SODetail({ params }: { params: Promise<{ id: strin
     <>
       <div className="topbar">
         <h1>수주 {String(so.so_no)} <StatusBadge kind="so" status={status} /></h1>
+      </div>
+      <div className="panel">
+        <div className="flow-title">처리 흐름</div>
+        <FlowSteps flow={soFlow(status, Boolean(so.inbox_id), so.ecount_slip_no as string | null)} />
       </div>
       <div className="panel">
         <div className="fields">

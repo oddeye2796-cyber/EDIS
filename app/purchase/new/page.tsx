@@ -1,14 +1,15 @@
 import { query, one } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
 import OrderForm from "@/components/OrderForm";
+import type { Draft } from "@/lib/extract";
 import { createPO } from "../actions";
 
 export default async function NewPO({ searchParams }: { searchParams: Promise<{ inbox?: string }> }) {
   await requireUser();
   const { inbox } = await searchParams;
   const inboxRow = inbox
-    ? await one<{ id: number; raw_text: string; partner_id: number | null }>(
-        "select id, raw_text, partner_id from order_inbox where id = $1",
+    ? await one<{ id: number; raw_text: string; partner_id: number | null; ai_draft: Draft | null }>(
+        "select id, raw_text, partner_id, ai_draft from order_inbox where id = $1",
         [Number(inbox)],
       )
     : undefined;
@@ -30,6 +31,7 @@ export default async function NewPO({ searchParams }: { searchParams: Promise<{ 
           defaultPartnerId={inboxRow?.partner_id}
           inboxId={inboxRow?.id}
           inboxText={inboxRow?.raw_text}
+          draft={inboxRow?.ai_draft}
           submitLabel="작성하고 승인 요청"
         />
       </div>

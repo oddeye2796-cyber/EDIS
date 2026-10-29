@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 
 export async function login(formData: FormData) {
   (await cookies()).set("edis_user", String(formData.get("userId")), { httpOnly: true, path: "/" });
-  redirect("/");
+  redirect(formData.get("role") === "sales" ? "/submit" : "/");
 }
 
 export async function logout() {
