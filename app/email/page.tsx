@@ -3,13 +3,14 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { query } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
+import { can, requirePerm } from "@/lib/permissions";
 import { dateTime } from "@/lib/labels";
 import { fetchNewMail, isMailMock, orderMailbox } from "@/lib/mail";
 import StatusBadge from "@/components/StatusBadge";
 
 async function checkMail() {
   "use server";
-  await requireUser();
+  await requirePerm("mail.check");
   const id = await fetchNewMail();
   revalidatePath("/email");
   redirect(id ? "/email?got=1" : "/email?got=0");
@@ -18,7 +19,7 @@ async function checkMail() {
 const inboxStatus: Record<string, string> = { new: "처리 전", converted: "문서로 등록", ignored: "무시" };
 
 export default async function EmailPage({ searchParams }: { searchParams: Promise<{ got?: string }> }) {
-  await requireUser();
+  const user = await requireUser();
   const got = (await searchParams).got;
   const received = await query(
     `select i.id, i.received_at, coalesce(i.email_from, p.email) as email_from, i.email_subject, i.raw_text, i.status, i.urgent, p.name as partner
@@ -46,9 +47,11 @@ export default async function EmailPage({ searchParams }: { searchParams: Promis
           {got === "1" && <div style={{ color: "var(--ok, #15803d)" }}>새 메일 1통을 접수함에 넣었습니다.</div>}
           {got === "0" && <div className="muted">새 메일이 없습니다.</div>}
         </div>
-        <form action={checkMail}>
-          <button>새 메일 확인</button>
-        </form>
+        {can(user.role, "mail.check") && (
+          <form action={checkMail}>
+            <button>새 메일 확인</button>
+          </form>
+        )}
       </div>
       <div className="panel">
         <h2>받은 주문 메일</h2>

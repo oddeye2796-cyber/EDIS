@@ -2,19 +2,20 @@ import Link from "next/link";
 import { revalidatePath } from "next/cache";
 import { query } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
+import { can, requirePerm } from "@/lib/permissions";
 import { partnerType } from "@/lib/labels";
 import { syncMaster } from "@/lib/master";
 import SyncBar from "@/components/SyncBar";
 
 async function sync() {
   "use server";
-  await requireUser();
+  await requirePerm("master.sync");
   await syncMaster("partners");
   revalidatePath("/partners");
 }
 
 export default async function PartnersPage({ searchParams }: { searchParams: Promise<{ q?: string; type?: string }> }) {
-  await requireUser();
+  const user = await requireUser();
   const sp = await searchParams;
   const q = (sp.q ?? "").trim();
   const type = sp.type && sp.type in partnerType ? sp.type : "";
@@ -29,7 +30,7 @@ export default async function PartnersPage({ searchParams }: { searchParams: Pro
   return (
     <>
       <h1 style={{ marginBottom: 16 }}>거래처</h1>
-      <SyncBar kind="partners" action={sync} />
+      <SyncBar kind="partners" action={can(user.role, "master.sync") ? sync : undefined} />
       <div className="panel">
         <form className="filters">
           <div><label>구분</label>

@@ -34,13 +34,17 @@ export default async function Dashboard() {
     `select i.id, i.channel, i.raw_text, i.received_at, p.name as partner from order_inbox i left join partners p on p.id = i.partner_id
       where i.status = 'new' order by received_at desc limit 5`,
   );
-  const mine =
-    user.role === "office_admin" ? "pending_approval" : user.role === "factory_manager" ? "approved" : null;
-  const todo = mine
+  // 역할마다 지금 처리할 발주서: 오피스는 승인, 공장은 확인·입고, 수발주 담당자는 발송
+  const mine: Record<string, string[]> = {
+    office_admin: ["pending_approval"],
+    factory_manager: ["approved", "sent", "partially_received"],
+    staff: ["confirmed"],
+  };
+  const todo = mine[user.role]
     ? await query(
         `select po.id, po.po_no, p.name as supplier, po.due_date, po.status from purchase_orders po
-           join partners p on p.id = po.supplier_id where po.status = $1 order by po.created_at`,
-        [mine],
+           join partners p on p.id = po.supplier_id where po.status = any($1) order by po.due_date nulls last, po.created_at`,
+        [mine[user.role]],
       )
     : [];
 
@@ -88,7 +92,7 @@ export default async function Dashboard() {
         ))}
       </div>
       <div className="grid2">
-        {mine && (
+        {mine[user.role] && (
           <div className="panel">
             <h2>내가 처리할 발주서</h2>
             <table>

@@ -2,14 +2,20 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { tx } from "@/lib/db";
-import { requireUser, type Role } from "@/lib/auth";
+import type { Role } from "@/lib/auth";
+import { guarded } from "@/lib/action";
+import { requirePerm, type Perm } from "@/lib/permissions";
 import { logStatus, nextDocNo, notify } from "@/lib/workflow";
 import { pushSlip } from "@/lib/ecount";
 import { readLines } from "@/components/OrderForm";
 import { learnAliases } from "@/lib/stock";
 
 export async function createPO(formData: FormData) {
-  const user = await requireUser();
+  return guarded(() => _createPO(formData));
+}
+
+async function _createPO(formData: FormData) {
+  const user = await requirePerm("po.create");
   const lines = readLines(formData);
   if (lines.length === 0) throw new Error("품목을 한 줄 이상 입력하세요.");
   const inboxId = Number(formData.get("inbox_id")) || null;
@@ -44,24 +50,29 @@ export async function createPO(formData: FormData) {
 
 const transitions: Record<
   string,
-  { from: string[]; to: string; roles: Role[]; stamp?: string; notifyRole?: Role; message: string }
+  { from: string[]; to: string; perm: Perm; stamp?: string; notifyRole?: Role; message: string }
 > = {
-  approve: { from: ["pending_approval"], to: "approved", roles: ["office_admin"], stamp: "approved", notifyRole: "factory_manager", message: "오피스 승인 완료, 공장 확인을 요청합니다." },
-  reject: { from: ["pending_approval", "approved"], to: "rejected", roles: ["office_admin", "factory_manager"], message: "반려되었습니다." },
-  confirm: { from: ["approved"], to: "confirmed", roles: ["factory_manager"], stamp: "confirmed", notifyRole: "office_admin", message: "공장 확인 완료, 공급사에 발송할 수 있습니다." },
-  send: { from: ["confirmed"], to: "sent", roles: ["office_admin", "staff"], message: "공급사에 발주서를 발송했습니다." },
-  cancel: { from: ["pending_approval", "approved", "confirmed", "sent"], to: "cancelled", roles: ["office_admin"], message: "취소되었습니다." },
-  resubmit: { from: ["rejected"], to: "pending_approval", roles: ["office_admin", "staff", "factory_manager"], notifyRole: "office_admin", message: "다시 승인을 요청합니다." },
+  approve: { from: ["pending_approval"], to: "approved", perm: "po.approve", stamp: "approved", notifyRole: "factory_manager", message: "오피스 승인 완료, 공장 확인을 요청합니다." },
+  reject: { from: ["pending_approval", "approved"], to: "rejected", perm: "po.reject", message: "반려되었습니다." },
+  confirm: { from: ["approved"], to: "confirmed", perm: "po.confirm", stamp: "confirmed", notifyRole: "office_admin", message: "공장 확인 완료, 공급사에 발송할 수 있습니다." },
+  send: { from: ["confirmed"], to: "sent", perm: "po.send", message: "공급사에 발주서를 발송했습니다." },
+  cancel: { from: ["pending_approval", "approved", "confirmed", "sent"], to: "cancelled", perm: "po.cancel", message: "취소되었습니다." },
+  resubmit: { from: ["rejected"], to: "pending_approval", perm: "po.resubmit", notifyRole: "office_admin", message: "다시 승인을 요청합니다." },
 };
+
+const STALE = "이미 다른 단계로 넘어간 문서입니다. 화면을 새로 고쳐 지금 상태를 확인하세요.";
 
 const sendVia: Record<string, string> = { email: "이메일", sms: "문자", fax: "팩스" };
 
 export async function transitionPO(formData: FormData) {
-  const user = await requireUser();
+  return guarded(() => _transitionPO(formData));
+}
+
+async function _transitionPO(formData: FormData) {
   const id = Number(formData.get("id"));
   const t = transitions[String(formData.get("action"))];
   if (!t) throw new Error("알 수 없는 동작입니다.");
-  if (!t.roles.includes(user.role)) throw new Error("이 단계를 처리할 권한이 없습니다.");
+  const user = await requirePerm(t.perm);
   let memo = String(formData.get("memo") ?? "").trim();
   const via = String(formData.get("send_via") ?? "");
   const to = String(formData.get("send_to") ?? "").trim();
@@ -72,7 +83,7 @@ export async function transitionPO(formData: FormData) {
   await tx(async (c) => {
     const { rows } = await c.query("select po_no, status from purchase_orders where id = $1 for update", [id]);
     const po = rows[0];
-    if (!po || !t.from.includes(po.status)) throw new Error("현재 상태에서는 처리할 수 없습니다.");
+    if (!po || !t.from.includes(po.status)) throw new Error(STALE);
     const stamp = t.stamp ? `, ${t.stamp}_by = $3, ${t.stamp}_at = now()` : "";
     await c.query(
       `update purchase_orders set status = $2${stamp} where id = $1`,
@@ -86,7 +97,11 @@ export async function transitionPO(formData: FormData) {
 }
 
 export async function receivePO(formData: FormData) {
-  const user = await requireUser();
+  return guarded(() => _receivePO(formData));
+}
+
+async function _receivePO(formData: FormData) {
+  const user = await requirePerm("po.receive");
   const id = Number(formData.get("id"));
   const lineIds = formData.getAll("line_id").map(Number);
   const qtys = formData.getAll("recv_qty").map(Number);
@@ -105,7 +120,7 @@ export async function receivePO(formData: FormData) {
     let any = false;
     for (let i = 0; i < lineIds.length; i++) {
       if (!(qtys[i] > 0)) continue;
-      if (!lotNos[i].trim()) throw new Error("입고하는 줄에는 로트번호가 필요합니다.");
+      if (!lotNos[i].trim()) throw new Error("입고 수량을 넣은 줄에는 로트번호도 입력해야 합니다.");
       any = true;
       const { rows: lr } = await c.query(
         "update purchase_order_lines set received_qty = received_qty + $2 where id = $1 and po_id = $3 returning item_id",

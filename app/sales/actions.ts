@@ -2,14 +2,19 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { one, query, tx } from "@/lib/db";
-import { requireUser } from "@/lib/auth";
+import { guarded } from "@/lib/action";
+import { requirePerm, type Perm } from "@/lib/permissions";
 import { logStatus, nextDocNo, notify } from "@/lib/workflow";
 import { pushSlip } from "@/lib/ecount";
 import { allocateFEFO, contractRemaining, createShortagePOs, learnAliases, stockFor } from "@/lib/stock";
 import { readLines } from "@/components/OrderForm";
 
 export async function createSO(formData: FormData) {
-  const user = await requireUser();
+  return guarded(() => _createSO(formData));
+}
+
+async function _createSO(formData: FormData) {
+  const user = await requirePerm("so.create");
   const lines = readLines(formData);
   if (lines.length === 0) throw new Error("품목을 한 줄 이상 입력하세요.");
   const inboxId = Number(formData.get("inbox_id")) || null;
@@ -42,21 +47,25 @@ export async function createSO(formData: FormData) {
   redirect(`/sales/${id}`);
 }
 
-const flow: Record<string, { from: string[]; to: string; notifyRole?: string; message: string }> = {
-  confirm: { from: ["received"], to: "confirmed", notifyRole: "factory_manager", message: "재고 확인 후 수주 확정, 출고 준비를 요청합니다." },
-  prepare: { from: ["confirmed"], to: "preparing", message: "출고 준비를 시작했습니다." },
-  cancel: { from: ["received", "confirmed", "preparing"], to: "cancelled", message: "취소되었습니다." },
+const flow: Record<string, { from: string[]; to: string; perm: Perm; notifyRole?: string; message: string }> = {
+  confirm: { from: ["received"], to: "confirmed", perm: "so.confirm", notifyRole: "factory_manager", message: "재고 확인 후 수주 확정, 출고 준비를 요청합니다." },
+  prepare: { from: ["confirmed"], to: "preparing", perm: "so.prepare", message: "출고 준비를 시작했습니다." },
+  cancel: { from: ["received", "confirmed", "preparing"], to: "cancelled", perm: "so.cancel", message: "취소되었습니다." },
 };
 
 export async function transitionSO(formData: FormData) {
-  const user = await requireUser();
+  return guarded(() => _transitionSO(formData));
+}
+
+async function _transitionSO(formData: FormData) {
   const id = Number(formData.get("id"));
   const t = flow[String(formData.get("action"))];
   if (!t) throw new Error("알 수 없는 동작입니다.");
+  const user = await requirePerm(t.perm);
   await tx(async (c) => {
     const { rows } = await c.query("select so_no, status from sales_orders where id = $1 for update", [id]);
     const so = rows[0];
-    if (!so || !t.from.includes(so.status)) throw new Error("현재 상태에서는 처리할 수 없습니다.");
+    if (!so || !t.from.includes(so.status)) throw new Error("이미 다른 단계로 넘어간 문서입니다. 화면을 새로 고쳐 지금 상태를 확인하세요.");
     await c.query("update sales_orders set status = $2 where id = $1", [id, t.to]);
     await logStatus(c, "so", id, so.status, t.to, user.id, t.message);
     if (t.notifyRole) await notify(c, t.notifyRole, `수주 ${so.so_no}: ${t.message}`, `/sales/${id}`);
@@ -65,7 +74,11 @@ export async function transitionSO(formData: FormData) {
 }
 
 export async function shipSO(formData: FormData) {
-  const user = await requireUser();
+  return guarded(() => _shipSO(formData));
+}
+
+async function _shipSO(formData: FormData) {
+  const user = await requirePerm("so.ship");
   const id = Number(formData.get("id"));
   const lineIds = formData.getAll("line_id").map(Number);
   const qtys = formData.getAll("ship_qty").map(Number);
@@ -139,7 +152,11 @@ export async function shipSO(formData: FormData) {
 }
 
 export async function orderShortage(formData: FormData) {
-  const user = await requireUser();
+  return guarded(() => _orderShortage(formData));
+}
+
+async function _orderShortage(formData: FormData) {
+  const user = await requirePerm("so.shortage");
   const id = Number(formData.get("id"));
   const row = await one<{ so_no: string; due_date: Date | null; status: string }>(
     "select so_no, due_date, status from sales_orders where id = $1",
@@ -178,7 +195,11 @@ export async function orderShortage(formData: FormData) {
 
 // 기존 수주(계약)에서 이번에 내보낼 수량만 골라 출하 지시를 만듭니다. 원 수주의 남은 수량을 넘을 수 없습니다.
 export async function shipFromOrder(formData: FormData) {
-  const user = await requireUser();
+  return guarded(() => _shipFromOrder(formData));
+}
+
+async function _shipFromOrder(formData: FormData) {
+  const user = await requirePerm("so.split");
   const parentId = Number(formData.get("parent_id"));
   const itemIds = formData.getAll("item_id").map(Number);
   const qtys = formData.getAll("qty").map(Number);

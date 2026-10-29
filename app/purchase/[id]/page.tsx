@@ -1,3 +1,4 @@
+import { can, whoCan } from "@/lib/permissions";
 import { notFound } from "next/navigation";
 import { one, query } from "@/lib/db";
 import { requireUser, type Role } from "@/lib/auth";
@@ -8,6 +9,10 @@ import FlowSteps from "@/components/FlowSteps";
 import { poFlow } from "@/lib/flow";
 import SendPOForm from "@/components/SendPOForm";
 import { receivePO, transitionPO } from "../actions";
+
+function Waiting({ who, what }: { who: string; what: string }) {
+  return <span className="muted">지금은 {who}가 {what}할 차례입니다.</span>;
+}
 
 function ActionButton({ id, action, label, kind, withMemo }: { id: number; action: string; label: string; kind?: string; withMemo?: boolean }) {
   return (
@@ -92,39 +97,39 @@ export default async function PODetail({ params }: { params: Promise<{ id: strin
       <div className="panel">
         <h2>다음 단계</h2>
         <div className="actions">
-          {status === "pending_approval" && role === "office_admin" && (
+          {status === "pending_approval" && (can(role, "po.approve") ? (
             <>
               <ActionButton id={id} action="approve" label="오피스 승인" />
               <ActionButton id={id} action="reject" label="반려" kind="danger" withMemo />
             </>
-          )}
-          {status === "pending_approval" && role !== "office_admin" && <span className="muted">오피스 관리자의 승인을 기다리는 중입니다.</span>}
-          {status === "approved" && role === "factory_manager" && (
+          ) : <Waiting who={whoCan("po.approve")} what="승인" />)}
+          {status === "approved" && (can(role, "po.confirm") ? (
             <>
               <ActionButton id={id} action="confirm" label="공장 확인" />
               <ActionButton id={id} action="reject" label="반려" kind="danger" withMemo />
             </>
-          )}
-          {status === "approved" && role !== "factory_manager" && <span className="muted">공장 관리자의 확인을 기다리는 중입니다.</span>}
-          {status === "confirmed" && role !== "factory_manager" && (
+          ) : <Waiting who={whoCan("po.confirm")} what="확인" />)}
+          {status === "confirmed" && (can(role, "po.send") ? (
             <SendPOForm
               id={id}
               action={transitionPO}
               contacts={{ email: po.supplier_email as string | null, sms: po.supplier_phone as string | null, fax: po.supplier_fax as string | null }}
             />
-          )}
+          ) : <Waiting who={whoCan("po.send")} what="공급사에 발송" />)}
           {po.sent_via ? <span className="muted">발송: {({ email: "이메일", sms: "문자", fax: "팩스" } as Record<string, string>)[String(po.sent_via)]} {String(po.sent_to ?? "")}</span> : null}
-          {status === "confirmed" && role === "factory_manager" && <span className="muted">사무실에서 공급사에 발송할 차례입니다.</span>}
-          {status === "rejected" && <ActionButton id={id} action="resubmit" label="다시 승인 요청" kind="secondary" />}
-          {["pending_approval", "approved", "confirmed", "sent"].includes(status) && role === "office_admin" && (
+          {canReceive && !can(role, "po.receive") && <Waiting who={whoCan("po.receive")} what="입고 확인" />}
+          {status === "rejected" && (can(role, "po.resubmit")
+            ? <ActionButton id={id} action="resubmit" label="다시 승인 요청" kind="secondary" />
+            : <span className="muted">반려된 발주서입니다. 사무실에서 고쳐 다시 요청할 수 있습니다.</span>)}
+          {["pending_approval", "approved", "confirmed", "sent"].includes(status) && can(role, "po.cancel") && (
             <ActionButton id={id} action="cancel" label="발주 취소" kind="danger" withMemo />
           )}
           {["received", "cancelled"].includes(status) && <span className="muted">처리가 끝난 발주서입니다.</span>}
-          <a className="btn secondary" href={`/purchase/new?copy=${id}`}>같은 내용으로 다시 발주</a>
+          {can(role, "po.create") && <a className="btn secondary" href={`/purchase/new?copy=${id}`}>같은 내용으로 다시 발주</a>}
         </div>
       </div>
 
-      {canReceive && (
+      {canReceive && can(role, "po.receive") && (
         <div className="panel">
           <h2>입고 처리</h2>
           <p className="muted" style={{ marginTop: 0 }}>들어온 수량과 로트 정보를 입력하세요. 전량 입고되면 이카운트에 구매 전표가 자동 등록됩니다.</p>

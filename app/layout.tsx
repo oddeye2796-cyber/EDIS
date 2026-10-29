@@ -5,6 +5,8 @@ import { currentUser, roleLabel } from "@/lib/auth";
 import { one } from "@/lib/db";
 import { logout } from "./actions";
 import { navByRole } from "@/lib/nav";
+import { Suspense } from "react";
+import ErrorBanner from "@/components/ErrorBanner";
 
 export const metadata: Metadata = { title: "휴럼 EDIS 수발주", description: "수발주 업무 자동화 데모" };
 export const viewport: Viewport = { width: "device-width", initialScale: 1 };
@@ -53,6 +55,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
                   </form>
                 </div>
               </div>
+              <Suspense><ErrorBanner /></Suspense>
               {children}
             </main>
           </div>

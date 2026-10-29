@@ -1,14 +1,16 @@
 import Link from "next/link";
 import { revalidatePath } from "next/cache";
 import { query } from "@/lib/db";
-import { requireUser } from "@/lib/auth";
+import { guarded } from "@/lib/action";
+import { requirePerm, requirePermPage } from "@/lib/permissions";
 import { channelLabel, dateTime } from "@/lib/labels";
 import { draftInbox } from "@/lib/inbox";
 import type { Draft } from "@/lib/extract";
 
 async function addInbox(formData: FormData) {
   "use server";
-  const user = await requireUser();
+  return guarded(async () => {
+  const user = await requirePerm("inbox.manage");
   const partnerId = Number(formData.get("partner_id")) || null;
   const [row] = await query<{ id: number }>(
     "insert into order_inbox (channel, direction, partner_id, raw_text, received_by) values ($1,$2,$3,$4,$5) returning id",
@@ -16,24 +18,25 @@ async function addInbox(formData: FormData) {
   );
   await draftInbox(row.id);
   revalidatePath("/inbox");
+  });
 }
 
 async function redraft(formData: FormData) {
   "use server";
-  await requireUser();
+  await requirePerm("inbox.manage");
   await draftInbox(Number(formData.get("id")));
   revalidatePath("/inbox");
 }
 
 async function ignoreInbox(formData: FormData) {
   "use server";
-  await requireUser();
+  await requirePerm("inbox.manage");
   await query("update order_inbox set status = 'ignored' where id = $1 and status = 'new'", [Number(formData.get("id"))]);
   revalidatePath("/inbox");
 }
 
 export default async function InboxPage() {
-  await requireUser();
+  await requirePermPage("inbox.manage");
   const partners = await query<{ id: number; name: string; type: string }>(
     "select id, name, type from partners order by name",
   );
