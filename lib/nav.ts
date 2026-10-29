@@ -5,13 +5,13 @@ export type NavGroup = { title: string; links: [label: string, href: string][] }
 
 export const navByRole: Record<Role, NavGroup[]> = {
   sales: [
-    { title: "영업", links: [["주문 올리기", "/submit"], ["출하 지시", "/submit?mode=ship"], ["내 출하 현황", "/shipments"], ["알림", "/notifications"]] },
+    { title: "영업", links: [["주문 올리기", "/submit"], ["출하 지시", "/submit?mode=ship"], ["내 출하 현황", "/shipments"], ["알림", "/notifications"], ["사용 매뉴얼", "/manual"]] },
   ],
   executive: [
-    { title: "경영", links: [["경영 현황", "/exec"], ["리포트", "/report"]] },
+    { title: "경영", links: [["경영 현황", "/exec"], ["리포트", "/report"], ["사용 매뉴얼", "/manual"]] },
   ],
   staff: [
-    { title: "홈", links: [["대시보드", "/"], ["알림", "/notifications"]] },
+    { title: "홈", links: [["대시보드", "/"], ["알림", "/notifications"], ["사용 매뉴얼", "/manual"]] },
     { title: "주문 접수", links: [["주문 접수함", "/inbox"], ["엑셀 일괄 등록", "/upload"]] },
     {
       title: "발주 (매입)",
@@ -27,7 +27,7 @@ export const navByRole: Record<Role, NavGroup[]> = {
     { title: "분석", links: [["리포트", "/report"]] },
   ],
   office_admin: [
-    { title: "홈", links: [["대시보드", "/"], ["경영 현황", "/exec"], ["알림", "/notifications"]] },
+    { title: "홈", links: [["대시보드", "/"], ["경영 현황", "/exec"], ["알림", "/notifications"], ["사용 매뉴얼", "/manual"]] },
     { title: "승인", links: [["발주 승인 대기", "/purchase?status=pending_approval"]] },
     { title: "현황", links: [["발주", "/purchase"], ["수주", "/sales"], ["주문 접수함", "/inbox"]] },
     { title: "분석", links: [["리포트", "/report"]] },
@@ -35,7 +35,7 @@ export const navByRole: Record<Role, NavGroup[]> = {
     { title: "기준 정보 (이카운트)", links: [["거래처", "/partners"], ["품목", "/items"]] },
   ],
   factory_manager: [
-    { title: "홈", links: [["대시보드", "/"], ["알림", "/notifications"]] },
+    { title: "홈", links: [["대시보드", "/"], ["알림", "/notifications"], ["사용 매뉴얼", "/manual"]] },
     {
       title: "공장 업무",
       links: [

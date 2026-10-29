@@ -8,6 +8,8 @@ import { navByRole } from "@/lib/nav";
 import { Suspense } from "react";
 import ErrorBanner from "@/components/ErrorBanner";
 import { flagLate, visibleNotice } from "@/lib/alerts";
+import ChatWidget from "@/components/ChatWidget";
+import { suggestions } from "@/lib/assistant";
 
 export const metadata: Metadata = { title: "휴럼 EDIS 수발주", description: "수발주 업무 자동화 데모" };
 export const viewport: Viewport = { width: "device-width", initialScale: 1 };
@@ -21,6 +23,13 @@ export default async function RootLayout({ children }: { children: React.ReactNo
     : undefined;
   return (
     <html lang="ko">
+      <head>
+        {/* 화면과 매뉴얼 글꼴: Pretendard (쓰는 글자만 받는 동적 서브셋) */}
+        <link
+          rel="stylesheet"
+          href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css"
+        />
+      </head>
       <body>
         {user ? (
           <div className="shell">
@@ -57,6 +66,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
               <Suspense><ErrorBanner /></Suspense>
               {children}
             </main>
+            <ChatWidget name={user.name} suggestions={suggestions[user.role]} llm={!!process.env.ANTHROPIC_API_KEY} />
           </div>
         ) : (
           <main className="main">{children}</main>
