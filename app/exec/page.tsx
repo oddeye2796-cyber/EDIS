@@ -46,9 +46,37 @@ function TrendChart({ months }: { months: { ym: string; sales: number; purchase:
   );
 }
 
-export default async function ExecPage() {
+type ShareRow = { name: string; amount: string; note?: string };
+
+// 거래처·품목 비중 막대. 상위 5개와 나머지 합계
+function ShareList({ rows, empty }: { rows: ShareRow[]; empty: string }) {
+  const total = rows.reduce((a, r) => a + Number(r.amount), 0);
+  if (total === 0) return <p className="muted">{empty}</p>;
+  const top = rows.slice(0, 5);
+  const rest = total - top.reduce((a, r) => a + Number(r.amount), 0);
+  return (
+    <>
+      {top.map((r) => {
+        const pct = (Number(r.amount) / total) * 100;
+        return (
+          <div key={r.name} className="share">
+            <div className="share-head"><span>{r.name}</span><span>{pct.toFixed(0)}% · {eok(Number(r.amount))}</span></div>
+            <div className="share-track"><div className="bar" style={{ width: `${pct}%` }} /></div>
+            {r.note && <div className="muted" style={{ fontSize: 12, marginTop: 2 }}>{r.note}</div>}
+          </div>
+        );
+      })}
+      {rest > 0 && <div className="muted">그 밖 {rows.length - top.length}곳 {eok(rest)}</div>}
+    </>
+  );
+}
+
+export default async function ExecPage({ searchParams }: { searchParams: Promise<{ p?: string }> }) {
   const user = await requireUser();
   if (!["executive", "office_admin"].includes(user.role)) redirect("/");
+  // 거래처·품목 분석 기간: 이번 달 또는 최근 90일
+  const period = (await searchParams).p === "90" ? "90" : "month";
+  const since = period === "90" ? "now() - interval '90 days'" : "date_trunc('month', now())";
 
   // 분할 출하(자식 수주)는 원 수주와 겹치므로 금액에서 뺍니다.
   const cur = await one<{ ym: string; day: number; sales: string; purchase: string; orders: number; shipped: number; on_time: number }>(
@@ -95,15 +123,44 @@ export default async function ExecPage() {
        from need n join items i on i.id = n.item_id left join stock s on s.item_id = n.item_id
       where n.need > coalesce(s.on_hand, 0) order by n.need - coalesce(s.on_hand, 0) desc`,
   );
-  const customers = await query<{ name: string; amount: string }>(
+  const customers = await query<ShareRow>(
     `select p.name, sum(l.qty * l.unit_price) as amount
        from sales_orders s join sales_order_lines l on l.so_id = s.id join partners p on p.id = s.customer_id
-      where s.status <> 'cancelled' and s.parent_so_id is null and s.created_at >= date_trunc('month', now())
+      where s.status <> 'cancelled' and s.parent_so_id is null and s.created_at >= ${since}
       group by p.name order by 2 desc`,
   );
+  const suppliers = await query<ShareRow>(
+    `select p.name, sum(l.qty * l.unit_price) as amount
+       from purchase_orders o join purchase_order_lines l on l.po_id = o.id join partners p on p.id = o.supplier_id
+      where o.status not in ('cancelled','rejected') and o.created_at >= ${since}
+      group by p.name order by 2 desc`,
+  );
+  const products = await query<{ name: string; amount: string; qty: string; unit: string }>(
+    `select i.name, sum(l.qty * l.unit_price) as amount, sum(l.qty) as qty, i.unit
+       from sales_orders s join sales_order_lines l on l.so_id = s.id join items i on i.id = l.item_id
+      where s.status <> 'cancelled' and s.parent_so_id is null and s.created_at >= ${since}
+      group by i.name, i.unit order by 2 desc`,
+  );
+  // 원부재료는 이번에 산 평균 단가를 기준 단가(이카운트 품목 단가)와 비교해 원가 압박을 봅니다.
+  const materials = await query<{ name: string; amount: string; qty: string; unit: string; avg_price: string; base_price: string }>(
+    `select i.name, sum(l.qty * l.unit_price) as amount, sum(l.qty) as qty, i.unit,
+            sum(l.qty * l.unit_price) / nullif(sum(l.qty), 0) as avg_price, i.default_price as base_price
+       from purchase_orders o join purchase_order_lines l on l.po_id = o.id join items i on i.id = l.item_id
+      where o.status not in ('cancelled','rejected') and o.created_at >= ${since}
+      group by i.name, i.unit, i.default_price order by 2 desc`,
+  );
   const custTotal = customers.reduce((a, c) => a + Number(c.amount), 0);
-  const topCustomers = customers.slice(0, 5);
-  const others = custTotal - topCustomers.reduce((a, c) => a + Number(c.amount), 0);
+  const supTotal = suppliers.reduce((a, c) => a + Number(c.amount), 0);
+  const topCustShare = custTotal ? (Number(customers[0].amount) / custTotal) * 100 : 0;
+  const topSupShare = supTotal ? (Number(suppliers[0].amount) / supTotal) * 100 : 0;
+  const qtyText = (n: string, unit: string) => `${Number(n).toLocaleString("ko-KR")}${unit}`;
+  const productRows: ShareRow[] = products.map((p) => ({ name: p.name, amount: p.amount, note: `${qtyText(p.qty, p.unit)} 주문` }));
+  const materialRows: ShareRow[] = materials.map((m) => {
+    const diff = Number(m.base_price) ? ((Number(m.avg_price) - Number(m.base_price)) / Number(m.base_price)) * 100 : 0;
+    const price = Math.abs(diff) < 0.5 ? "기준 단가와 같음" : `기준 단가보다 ${diff > 0 ? "▲" : "▼"}${Math.abs(diff).toFixed(1)}%`;
+    return { name: m.name, amount: m.amount, note: `${qtyText(m.qty, m.unit)} · ${price}` };
+  });
+  const periodLabel = period === "90" ? "최근 90일" : "이번 달";
 
   const months = [
     ...history.slice().reverse().map((m) => ({ ym: m.ym, sales: Number(m.sales), purchase: Number(m.purchase), current: false })),
@@ -169,18 +226,39 @@ export default async function ExecPage() {
           </ul>
         </div>
         <div className="panel">
-          <h2>이번 달 매출처 비중</h2>
-          {custTotal === 0 && <p className="muted">이번 달 수주가 아직 없습니다.</p>}
-          {topCustomers.map((c) => {
-            const pct = (Number(c.amount) / custTotal) * 100;
-            return (
-              <div key={c.name} className="share">
-                <div className="share-head"><span>{c.name}</span><span>{pct.toFixed(0)}% · {eok(Number(c.amount))}</span></div>
-                <div className="share-track"><div className="bar" style={{ width: `${pct}%` }} /></div>
-              </div>
-            );
-          })}
-          {others > 0 && <div className="muted">그 밖의 거래처 {eok(others)}</div>}
+          <h2>한눈에 보는 거래 구조 <span className="muted" style={{ fontWeight: 400 }}>({periodLabel})</span></h2>
+          <ul className="facts">
+            <li>가장 큰 고객 <b>{customers[0]?.name ?? "-"}</b>, 매출의 {topCustShare.toFixed(0)}%{topCustShare >= 40 && <span className="badge warn" style={{ marginLeft: 6 }}>쏠림 주의</span>}</li>
+            <li>가장 많이 사는 공급사 <b>{suppliers[0]?.name ?? "-"}</b>, 매입의 {topSupShare.toFixed(0)}%{topSupShare >= 50 && <span className="badge warn" style={{ marginLeft: 6 }}>의존 주의</span>}</li>
+            <li>가장 잘 팔리는 제품 <b>{products[0]?.name ?? "-"}</b>{products[0] ? `, ${eok(Number(products[0].amount))}` : ""}</li>
+            <li>매입 대비 매출 <b>{supTotal ? `${(custTotal / supTotal).toFixed(1)}배` : "-"}</b> <span className="muted">(매출 {eok(custTotal)} / 매입 {eok(supTotal)})</span></li>
+          </ul>
+        </div>
+      </div>
+
+      <div className="topbar" style={{ margin: "8px 0 12px" }}>
+        <h2 style={{ margin: 0 }}>거래처와 품목</h2>
+        <div className="chips">
+          <Link href="/exec" className={`chip ${period === "month" ? "on" : ""}`}>이번 달</Link>
+          <Link href="/exec?p=90" className={`chip ${period === "90" ? "on" : ""}`}>최근 90일</Link>
+        </div>
+      </div>
+      <div className="grid2">
+        <div className="panel">
+          <h2>매출처 (누구에게 파나)</h2>
+          <ShareList rows={customers} empty="기간 안에 수주가 없습니다." />
+        </div>
+        <div className="panel">
+          <h2>매입처 (누구에게서 사나)</h2>
+          <ShareList rows={suppliers} empty="기간 안에 발주가 없습니다." />
+        </div>
+        <div className="panel">
+          <h2>제품별 매출 (무엇이 팔리나)</h2>
+          <ShareList rows={productRows} empty="기간 안에 수주가 없습니다." />
+        </div>
+        <div className="panel">
+          <h2>원부재료별 매입 (무엇을 사나)</h2>
+          <ShareList rows={materialRows} empty="기간 안에 발주가 없습니다." />
         </div>
       </div>
 
