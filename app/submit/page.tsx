@@ -2,7 +2,8 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { one, query, tx } from "@/lib/db";
 import { logStatus, nextDocNo, notify } from "@/lib/workflow";
-import { requireUser } from "@/lib/auth";
+import { guarded } from "@/lib/action";
+import { requirePerm, requirePermPage } from "@/lib/permissions";
 import { channelLabel, dateTime } from "@/lib/labels";
 import { draftInbox } from "@/lib/inbox";
 import type { Draft } from "@/lib/extract";
@@ -15,7 +16,11 @@ const MAX_IMAGE = 5 * 1024 * 1024;
 
 async function submitOrder(formData: FormData) {
   "use server";
-  const user = await requireUser();
+  return guarded(() => saveOrder(formData));
+}
+
+async function saveOrder(formData: FormData) {
+  const user = await requirePerm("order.submit");
   const text = String(formData.get("raw_text") ?? "").trim();
   const file = formData.get("image");
   const image = file instanceof File && file.size > 0 ? file : null;
@@ -46,7 +51,11 @@ async function submitOrder(formData: FormData) {
 // 출하 지시: 영업 담당자가 거래처·품목·수량·납기를 직접 골라 보내면 바로 수주(출하 지시)로 등록됩니다.
 async function shipRequest(formData: FormData) {
   "use server";
-  const user = await requireUser();
+  return guarded(() => saveShipRequest(formData));
+}
+
+async function saveShipRequest(formData: FormData) {
+  const user = await requirePerm("order.submit");
   const customerId = Number(formData.get("customer_id"));
   const ids = formData.getAll("item_id").map(Number);
   const qtys = formData.getAll("qty").map(Number);
@@ -83,7 +92,7 @@ export default async function SubmitPage({
 }: {
   searchParams: Promise<{ done?: string; mode?: string; sent?: string; copy?: string; from?: string }>;
 }) {
-  const user = await requireUser();
+  const user = await requirePermPage("order.submit");
   const { done, mode, sent, copy, from } = await searchParams;
   const ship = mode === "ship";
   const partners = await query<{ id: number; name: string }>("select id, name from partners order by name");

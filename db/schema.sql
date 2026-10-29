@@ -148,7 +148,7 @@ alter table order_inbox add column if not exists ai_error text;
 
 -- 영업 담당자 역할과 주문 캡처 이미지
 alter table users drop constraint if exists users_role_check;
-alter table users add constraint users_role_check check (role in ('office_admin','factory_manager','staff','sales'));
+alter table users add constraint users_role_check check (role in ('office_admin','factory_manager','staff','sales','executive'));
 alter table order_inbox add column if not exists image bytea;
 alter table order_inbox add column if not exists image_type text;
 alter table order_inbox add column if not exists sales_note text;
@@ -190,3 +190,25 @@ alter table items add constraint items_category_check check (category in ('raw',
 
 -- 출하 지시를 기존 수주(계약)에 연결: 원 수주의 남은 수량에서 나눠 내보냅니다.
 alter table sales_orders add column if not exists parent_so_id int references sales_orders(id);
+
+-- 기준 정보(거래처·품목)는 이카운트가 원본입니다. EDIS는 받아서 조회만 합니다.
+create table if not exists master_sync_logs (
+  id serial primary key,
+  kind text not null check (kind in ('partners','items')),
+  count int not null,
+  mock boolean not null default true,
+  at timestamptz not null default now()
+);
+
+-- 주문 메일함에서 가져온 메일의 보낸 사람·제목
+alter table order_inbox add column if not exists email_from text;
+alter table order_inbox add column if not exists email_subject text;
+
+-- 경영 현황용 지난 달 실적. 운영에서는 이카운트 월별 매출·매입 집계에서 받아 옵니다. 이번 달은 EDIS 데이터로 계산합니다.
+create table if not exists monthly_results (
+  ym text primary key,
+  sales numeric(16,0) not null,
+  purchase numeric(16,0) not null,
+  orders int not null,
+  on_time_rate numeric(5,1)
+);

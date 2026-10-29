@@ -1,7 +1,7 @@
 "use server";
 import ExcelJS from "exceljs";
 import { query, tx } from "@/lib/db";
-import { requireUser } from "@/lib/auth";
+import { requirePerm } from "@/lib/permissions";
 import { logStatus, nextDocNo, notify } from "@/lib/workflow";
 
 export type UploadResult = { ok: boolean; created: { kind: "po" | "so"; id: number; no: string; partner: string; lines: number }[]; errors: string[] } | null;
@@ -61,7 +61,7 @@ function toDate(s: string, year: number): string | null {
 // 엑셀(.xlsx)이나 CSV의 주문 줄을 읽어 구분·거래처·납기가 같은 줄끼리 발주서/수주 한 건으로 묶어 등록합니다.
 // 한 줄이라도 틀리면 아무것도 만들지 않고 틀린 줄을 알려 줍니다.
 export async function uploadOrders(_prev: UploadResult, formData: FormData): Promise<UploadResult> {
-  const user = await requireUser();
+  const user = await requirePerm("upload");
   const file = formData.get("file");
   if (!(file instanceof File) || file.size === 0) return { ok: false, created: [], errors: ["파일을 골라 주세요."] };
   if (file.size > 2 * 1024 * 1024) return { ok: false, created: [], errors: ["파일은 2MB 이하로 올려 주세요."] };

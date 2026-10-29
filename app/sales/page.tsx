@@ -1,21 +1,31 @@
 import Link from "next/link";
 import { query } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
-import { date, won } from "@/lib/labels";
+import { date, soStatus, won } from "@/lib/labels";
 import StatusBadge, { DueBadge } from "@/components/StatusBadge";
 
-export default async function SalesList() {
+export default async function SalesList({ searchParams }: { searchParams: Promise<{ status?: string }> }) {
   await requireUser();
+  const filter = ((await searchParams).status ?? "").split(",").filter((v) => v in soStatus);
   const rows = await query(
     `select so.*, p.name as customer,
             (select coalesce(sum(qty * unit_price),0) from sales_order_lines where so_id = so.id) as total
        from sales_orders so join partners p on p.id = so.customer_id
+      where cardinality($1::text[]) = 0 or so.status = any($1)
       order by (so.urgent and so.status not in ('shipped','cancelled')) desc, so.created_at desc`,
+    [filter],
   );
   return (
     <>
       <div className="topbar">
-        <h1>수주 (매출)</h1>
+        <h1>
+          수주 (매출)
+          {filter.length > 0 && (
+            <span className="muted" style={{ fontSize: 14, fontWeight: 400, marginLeft: 8 }}>
+              {filter.map((f) => soStatus[f]).join(", ")} · <Link href="/sales">전체 보기</Link>
+            </span>
+          )}
+        </h1>
         <Link className="btn" href="/sales/new">수주 등록</Link>
       </div>
       <div className="panel">

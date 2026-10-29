@@ -1,14 +1,16 @@
 import Link from "next/link";
 import { revalidatePath } from "next/cache";
 import { query } from "@/lib/db";
-import { requireUser } from "@/lib/auth";
+import { guarded } from "@/lib/action";
+import { requirePerm, requirePermPage } from "@/lib/permissions";
 import { channelLabel, dateTime } from "@/lib/labels";
 import { draftInbox } from "@/lib/inbox";
 import type { Draft } from "@/lib/extract";
 
 async function addInbox(formData: FormData) {
   "use server";
-  const user = await requireUser();
+  return guarded(async () => {
+  const user = await requirePerm("inbox.manage");
   const partnerId = Number(formData.get("partner_id")) || null;
   const [row] = await query<{ id: number }>(
     "insert into order_inbox (channel, direction, partner_id, raw_text, received_by) values ($1,$2,$3,$4,$5) returning id",
@@ -16,24 +18,25 @@ async function addInbox(formData: FormData) {
   );
   await draftInbox(row.id);
   revalidatePath("/inbox");
+  });
 }
 
 async function redraft(formData: FormData) {
   "use server";
-  await requireUser();
+  await requirePerm("inbox.manage");
   await draftInbox(Number(formData.get("id")));
   revalidatePath("/inbox");
 }
 
 async function ignoreInbox(formData: FormData) {
   "use server";
-  await requireUser();
+  await requirePerm("inbox.manage");
   await query("update order_inbox set status = 'ignored' where id = $1 and status = 'new'", [Number(formData.get("id"))]);
   revalidatePath("/inbox");
 }
 
 export default async function InboxPage() {
-  await requireUser();
+  await requirePermPage("inbox.manage");
   const partners = await query<{ id: number; name: string; type: string }>(
     "select id, name, type from partners order by name",
   );
@@ -56,11 +59,11 @@ export default async function InboxPage() {
     <>
       <h1 style={{ marginBottom: 4 }}>주문 접수함</h1>
       <p className="muted" style={{ marginTop: 0 }}>
-        영업 담당자가 전달한 카톡·문자·메일 원문을 남기면 AI가 거래처, 품목, 수량, 납기를 정리합니다. 관리자는 정리된 초안을 확인하고 발주서나 수주로 확정합니다.
+        영업 담당자가 "주문 올리기"로 보낸 주문이 여기 쌓입니다. AI가 정리한 초안을 확인하고 발주서나 수주로 확정하세요.
       </p>
-      <div className="panel">
-        <h2>새 주문 기록</h2>
-        <form action={addInbox}>
+      <details className="panel">
+        <summary><b>사무실에서 직접 받은 주문 기록하기</b> <span className="muted">(사무실로 바로 온 전화·메일 등)</span></summary>
+        <form action={addInbox} style={{ marginTop: 12 }}>
           <div className="fields">
             <div><label>채널</label>
               <select name="channel">
@@ -86,7 +89,7 @@ export default async function InboxPage() {
           </div>
           <button>기록</button>
         </form>
-      </div>
+      </details>
       <div className="panel">
         <table>
           <thead>

@@ -1,12 +1,12 @@
 import { query, one } from "@/lib/db";
-import { requireUser } from "@/lib/auth";
+import { requirePermPage } from "@/lib/permissions";
 import OrderForm from "@/components/OrderForm";
 import type { Draft } from "@/lib/extract";
 import { copyDraft } from "@/lib/copy";
 import { createSO } from "../actions";
 
 export default async function NewSO({ searchParams }: { searchParams: Promise<{ inbox?: string; copy?: string }> }) {
-  await requireUser();
+  await requirePermPage("so.create");
   const { inbox, copy } = await searchParams;
   const copied = copy ? await copyDraft("so", Number(copy)) : null;
   const inboxRow = inbox

@@ -10,6 +10,7 @@ import { poSteps, soSteps } from "@/lib/flow";
 export default async function Dashboard() {
   const user = await requireUser();
   if (user.role === "sales") redirect("/submit");
+  if (user.role === "executive") redirect("/exec");
   const c = await one<Record<string, number>>(
     `select
        (select count(*)::int from order_inbox where status = 'new') as inbox,
@@ -33,13 +34,17 @@ export default async function Dashboard() {
     `select i.id, i.channel, i.raw_text, i.received_at, p.name as partner from order_inbox i left join partners p on p.id = i.partner_id
       where i.status = 'new' order by received_at desc limit 5`,
   );
-  const mine =
-    user.role === "office_admin" ? "pending_approval" : user.role === "factory_manager" ? "approved" : null;
-  const todo = mine
+  // 역할마다 지금 처리할 발주서: 오피스는 승인, 공장은 확인·입고, 수발주 담당자는 발송
+  const mine: Record<string, string[]> = {
+    office_admin: ["pending_approval"],
+    factory_manager: ["approved", "sent", "partially_received"],
+    staff: ["confirmed"],
+  };
+  const todo = mine[user.role]
     ? await query(
         `select po.id, po.po_no, p.name as supplier, po.due_date, po.status from purchase_orders po
-           join partners p on p.id = po.supplier_id where po.status = $1 order by po.created_at`,
-        [mine],
+           join partners p on p.id = po.supplier_id where po.status = any($1) order by po.due_date nulls last, po.created_at`,
+        [mine[user.role]],
       )
     : [];
 
@@ -61,9 +66,9 @@ export default async function Dashboard() {
 
   const stats: [string, number, string][] = [
     ["처리 전 주문", c?.inbox ?? 0, "/inbox"],
-    ["오피스 승인 대기", c?.pending ?? 0, "/purchase"],
-    ["공장 확인 대기", c?.factory ?? 0, "/purchase"],
-    ["입고 예정 발주", c?.incoming ?? 0, "/purchase"],
+    ["오피스 승인 대기", c?.pending ?? 0, "/purchase?status=pending_approval"],
+    ["공장 확인 대기", c?.factory ?? 0, "/purchase?status=approved"],
+    ["입고 예정 발주", c?.incoming ?? 0, "/purchase?status=sent,partially_received"],
     ["진행 중 수주", c?.open_so ?? 0, "/sales"],
     ["90일 내 유통기한 로트", c?.expiring ?? 0, "/lots"],
   ];
@@ -72,8 +77,6 @@ export default async function Dashboard() {
     <>
       <h1 style={{ marginBottom: 16 }}>대시보드</h1>
       <div className="panel">
-        <div className="flow-title">AUTOMATION FLOW</div>
-        <h2>자동화는 이렇게 처리됩니다</h2>
         <p className="muted" style={{ marginTop: 0 }}>주황색 숫자는 지금 그 단계에 머물러 있는 건수입니다.</p>
         <div style={{ marginBottom: 8 }}><b>수주 (고객 주문)</b></div>
         <FlowSteps flow={{ steps: soSteps, current: -1, tone: "active" }} counts={soCounts} />
@@ -89,7 +92,7 @@ export default async function Dashboard() {
         ))}
       </div>
       <div className="grid2">
-        {mine && (
+        {mine[user.role] && (
           <div className="panel">
             <h2>내가 처리할 발주서</h2>
             <table>

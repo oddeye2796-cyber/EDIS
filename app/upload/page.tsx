@@ -1,8 +1,8 @@
-import { requireUser } from "@/lib/auth";
+import { requirePermPage } from "@/lib/permissions";
 import UploadForm from "./UploadForm";
 
 export default async function UploadPage() {
-  await requireUser();
+  await requirePermPage("upload");
   return (
     <>
       <h1 style={{ marginBottom: 4 }}>엑셀 일괄 등록</h1>

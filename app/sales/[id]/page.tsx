@@ -1,3 +1,4 @@
+import { can, whoCan } from "@/lib/permissions";
 import { notFound } from "next/navigation";
 import { one, query } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
@@ -8,6 +9,10 @@ import FlowSteps from "@/components/FlowSteps";
 import { soFlow } from "@/lib/flow";
 import { contractRemaining, stockFor } from "@/lib/stock";
 import { orderShortage, shipSO, transitionSO } from "../actions";
+
+function Waiting({ who, what }: { who: string; what: string }) {
+  return <span className="muted">지금은 {who}가 {what}할 차례입니다.</span>;
+}
 
 function ActionButton({ id, action, label, kind }: { id: number; action: string; label: string; kind?: string }) {
   return (
@@ -20,7 +25,7 @@ function ActionButton({ id, action, label, kind }: { id: number; action: string;
 }
 
 export default async function SODetail({ params }: { params: Promise<{ id: string }> }) {
-  await requireUser();
+  const { role } = await requireUser();
   const id = Number((await params).id);
   const so = await one(
     `select so.*, p.name as customer, u.name as creator, i.raw_text, i.channel
@@ -157,7 +162,7 @@ export default async function SODetail({ params }: { params: Promise<{ id: strin
             </tbody>
           </table>
           {madeRequest && <p className="muted">공장에 완제품 생산을 요청했습니다. 처리 이력에서 내용을 볼 수 있어요.</p>}
-          {status === "received" && check.some((l) => l.short > 0 && (!l.product || !madeRequest)) && (
+          {status === "received" && can(role, "so.shortage") && check.some((l) => l.short > 0 && (!l.product || !madeRequest)) && (
             <form action={orderShortage} style={{ marginTop: 12 }}>
               <input type="hidden" name="id" value={id} />
               <button>
@@ -184,17 +189,22 @@ export default async function SODetail({ params }: { params: Promise<{ id: strin
       <div className="panel">
         <h2>다음 단계</h2>
         <div className="actions">
-          {status === "received" && <ActionButton id={id} action="confirm" label="수주 확정" />}
-          {status === "confirmed" && <ActionButton id={id} action="prepare" label="출고 준비 시작" />}
-          {["received", "confirmed", "preparing"].includes(status) && <ActionButton id={id} action="cancel" label="취소" kind="danger" />}
+          {status === "received" && (can(role, "so.confirm")
+            ? <ActionButton id={id} action="confirm" label="수주 확정" />
+            : <Waiting who={whoCan("so.confirm")} what="재고를 보고 확정" />)}
+          {status === "confirmed" && (can(role, "so.prepare")
+            ? <ActionButton id={id} action="prepare" label="출고 준비 시작" />
+            : <Waiting who={whoCan("so.prepare")} what="출고 준비를 시작" />)}
+          {canShip && !can(role, "so.ship") && <Waiting who={whoCan("so.ship")} what="출고" />}
+          {["received", "confirmed", "preparing"].includes(status) && can(role, "so.cancel") && <ActionButton id={id} action="cancel" label="취소" kind="danger" />}
           {["shipped", "cancelled"].includes(status) && <span className="muted">처리가 끝난 수주입니다.</span>}
-          <a className="btn secondary" href={`/sales/new?copy=${id}`}>같은 내용으로 다시 수주</a>
-          {so.kind === "order" && ["received", "confirmed", "preparing", "partially_shipped"].includes(status) && (
+          {can(role, "so.create") && <a className="btn secondary" href={`/sales/new?copy=${id}`}>같은 내용으로 다시 수주</a>}
+          {so.kind === "order" && can(role, "so.split") && ["received", "confirmed", "preparing", "partially_shipped"].includes(status) && (
             <a className="btn secondary" href={`/submit?mode=ship&from=${id}`}>이 수주에서 나눠 출하 지시</a>
           )}
         </div>
       </div>
-      {canShip && (
+      {canShip && can(role, "so.ship") && (
         <div className="panel">
           <h2>출고 처리</h2>
           <p className="muted" style={{ marginTop: 0 }}>전량 출고되면 이카운트에 판매 전표가 자동 등록됩니다.</p>
