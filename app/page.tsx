@@ -10,6 +10,7 @@ import { poSteps, soSteps } from "@/lib/flow";
 export default async function Dashboard() {
   const user = await requireUser();
   if (user.role === "sales") redirect("/submit");
+  if (user.role === "executive") redirect("/exec");
   const c = await one<Record<string, number>>(
     `select
        (select count(*)::int from order_inbox where status = 'new') as inbox,

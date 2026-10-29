@@ -141,3 +141,33 @@ button.link { background: none; border: none; color: inherit; padding: 0 2px; cu
 .filters { display: grid; grid-template-columns: 160px minmax(200px, 1fr) auto; gap: 12px; align-items: end; margin-bottom: 12px; }
 .filters .filter-actions { display: flex; gap: 10px; align-items: center; }
 @media (max-width: 768px) { .filters { grid-template-columns: 1fr; } }
+
+/* 경영 현황 */
+.exec-summary { font-size: 17px; margin: 0 0 16px; }
+.kpis { display: grid; gap: 16px; grid-template-columns: repeat(4, 1fr); margin-bottom: 16px; }
+.kpi { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 18px; }
+.kpi .l { color: var(--muted); font-size: 13px; }
+.kpi .n { font-size: 28px; font-weight: 700; margin: 6px 0 4px; }
+.delta { font-size: 13px; font-weight: 600; }
+.delta.up { color: var(--ok); }
+.delta.down { color: var(--bad); }
+.alerts { list-style: none; padding: 0; margin: 0; }
+.alerts li { display: flex; align-items: center; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--line); }
+.alerts li:last-child { border-bottom: 0; }
+.alerts .dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+.alerts .bad .dot { background: var(--bad); }
+.alerts .warn .dot { background: #f59e0b; }
+.alerts .ok .dot { background: var(--ok); }
+.alerts a { color: inherit; }
+.share { margin-bottom: 12px; }
+.share-head { display: flex; justify-content: space-between; font-size: 14px; margin-bottom: 4px; }
+.share-track { background: #eef1f5; border-radius: 4px; }
+.trend { width: 100%; height: auto; }
+.trend .axis { stroke: var(--line); }
+.trend .s1, .legend .s1 { fill: var(--accent); background: var(--accent); }
+.trend .s2, .legend .s2 { fill: #94a3b8; background: #94a3b8; }
+.trend .val { font-size: 11px; fill: var(--text); }
+.trend .lab { font-size: 12px; fill: var(--muted); }
+.legend { font-size: 13px; color: var(--muted); display: flex; align-items: center; gap: 6px; }
+.legend .sw { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-left: 8px; }
+@media (max-width: 768px) { .kpis { grid-template-columns: repeat(2, 1fr); } .kpi .n { font-size: 22px; } }

@@ -3,7 +3,7 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { one } from "./db";
 
-export type Role = "office_admin" | "factory_manager" | "staff" | "sales";
+export type Role = "office_admin" | "factory_manager" | "staff" | "sales" | "executive";
 export type User = { id: number; name: string; email: string; role: Role };
 
 export const roleLabel: Record<Role, string> = {
@@ -11,6 +11,7 @@ export const roleLabel: Record<Role, string> = {
   factory_manager: "공장 관리자",
   staff: "수발주 담당자",
   sales: "영업 담당자",
+  executive: "경영진",
 };
 
 export async function currentUser(): Promise<User | undefined> {

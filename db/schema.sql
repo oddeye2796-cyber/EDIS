@@ -148,7 +148,7 @@ alter table order_inbox add column if not exists ai_error text;
 
 -- 영업 담당자 역할과 주문 캡처 이미지
 alter table users drop constraint if exists users_role_check;
-alter table users add constraint users_role_check check (role in ('office_admin','factory_manager','staff','sales'));
+alter table users add constraint users_role_check check (role in ('office_admin','factory_manager','staff','sales','executive'));
 alter table order_inbox add column if not exists image bytea;
 alter table order_inbox add column if not exists image_type text;
 alter table order_inbox add column if not exists sales_note text;
@@ -203,3 +203,12 @@ create table if not exists master_sync_logs (
 -- 주문 메일함에서 가져온 메일의 보낸 사람·제목
 alter table order_inbox add column if not exists email_from text;
 alter table order_inbox add column if not exists email_subject text;
+
+-- 경영 현황용 지난 달 실적. 운영에서는 이카운트 월별 매출·매입 집계에서 받아 옵니다. 이번 달은 EDIS 데이터로 계산합니다.
+create table if not exists monthly_results (
+  ym text primary key,
+  sales numeric(16,0) not null,
+  purchase numeric(16,0) not null,
+  orders int not null,
+  on_time_rate numeric(5,1)
+);

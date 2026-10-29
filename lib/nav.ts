@@ -7,6 +7,9 @@ export const navByRole: Record<Role, NavGroup[]> = {
   sales: [
     { title: "영업", links: [["주문 올리기", "/submit"], ["출하 지시", "/submit?mode=ship"]] },
   ],
+  executive: [
+    { title: "경영", links: [["경영 현황", "/exec"], ["리포트", "/report"]] },
+  ],
   staff: [
     { title: "홈", links: [["대시보드", "/"], ["알림", "/notifications"]] },
     { title: "주문 접수", links: [["주문 접수함", "/inbox"], ["엑셀 일괄 등록", "/upload"]] },
@@ -24,7 +27,7 @@ export const navByRole: Record<Role, NavGroup[]> = {
     { title: "분석", links: [["리포트", "/report"]] },
   ],
   office_admin: [
-    { title: "홈", links: [["대시보드", "/"], ["알림", "/notifications"]] },
+    { title: "홈", links: [["대시보드", "/"], ["경영 현황", "/exec"], ["알림", "/notifications"]] },
     { title: "승인", links: [["발주 승인 대기", "/purchase?status=pending_approval"]] },
     { title: "현황", links: [["발주", "/purchase"], ["수주", "/sales"], ["주문 접수함", "/inbox"]] },
     { title: "분석", links: [["리포트", "/report"]] },

@@ -5,7 +5,8 @@ insert into users (name, email, role) values
   ('김오피스', 'office@edis.demo', 'office_admin'),
   ('박공장', 'factory@edis.demo', 'factory_manager'),
   ('이담당', 'staff@edis.demo', 'staff'),
-  ('최영업', 'sales@edis.demo', 'sales')
+  ('최영업', 'sales@edis.demo', 'sales'),
+  ('정대표', 'ceo@edis.demo', 'executive')
 on conflict (email) do nothing;
 
 -- 공급사(가상)와 판매 채널(공개 기사에 나온 유통 채널)
@@ -74,3 +75,12 @@ select i.id, a.alias from (values
   ('FG-006','리얼슬립')
 ) as a(code, alias) join items i on i.code = a.code
 on conflict (alias) do nothing;
+
+-- 지난 5개월 실적 (가상, 이카운트 집계 자리)
+insert into monthly_results (ym, sales, purchase, orders, on_time_rate) values
+  ('2026-05', 128400000, 31200000, 6, 91.7),
+  ('2026-06', 135900000, 34800000, 7, 93.2),
+  ('2026-07', 121300000, 29500000, 6, 88.9),
+  ('2026-08', 142600000, 36900000, 8, 95.1),
+  ('2026-09', 151800000, 38300000, 8, 94.3)
+on conflict (ym) do nothing;
