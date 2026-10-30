@@ -34,14 +34,14 @@ export default async function SalesList({ searchParams }: { searchParams: Promis
           <tbody>
             {rows.map((r) => (
               <tr key={String(r.id)}>
-                <td>
+                <td className="nw">
                   <Link href={`/sales/${r.id}`}>{String(r.so_no)}</Link>
                   {r.urgent ? <> <span className="badge bad">긴급</span></> : null}
                   {r.kind === "ship_request" ? <> <span className="badge info">출하 지시</span></> : null}
                 </td>
                 <td>{String(r.customer)}</td>
-                <td>{date(r.order_date)}</td>
-                <td>{date(r.due_date)} <DueBadge due={r.due_date} done={["shipped", "cancelled"].includes(String(r.status))} /></td>
+                <td className="nw">{date(r.order_date)}</td>
+                <td className="nw">{date(r.due_date)} <DueBadge due={r.due_date} done={["shipped", "cancelled"].includes(String(r.status))} /></td>
                 <td className="num">{won(r.total)}</td>
                 <td><StatusBadge kind="so" status={String(r.status)} /></td>
                 <td>{String(r.ecount_slip_no ?? "-")}</td>

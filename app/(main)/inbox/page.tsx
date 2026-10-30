@@ -109,7 +109,7 @@ export default async function InboxPage({ searchParams }: { searchParams: Promis
               const target = dir === "sales" ? "sales" : "purchase";
               return (
                 <tr key={String(r.id)} style={isNew && r.urgent ? { background: "#fff5f5" } : undefined}>
-                  <td>{isNew && r.urgent ? <div><span className="badge bad">긴급</span></div> : null}{dateTime(r.received_at)}<div className="muted">{String(r.receiver ?? "")}</div></td>
+                  <td className="nw">{isNew && r.urgent ? <div><span className="badge bad">긴급</span></div> : null}{dateTime(r.received_at)}<div className="muted">{String(r.receiver ?? "")}</div></td>
                   <td><span className="badge info">{channelLabel[String(r.channel)]}</span></td>
                   <td>{r.direction === "sales" ? "수주" : "발주"}</td>
                   <td>{String(r.partner_name ?? "-")}</td>
@@ -175,7 +175,7 @@ function DraftCell({ draft, error }: { draft: Draft | null; error: string | null
           {draft.needs_check.map((n, i) => <li key={i}>{n}</li>)}
         </ul>
       )}
-      <div className="muted" style={{ fontSize: 12 }}>{draft.engine === "claude" ? "Claude 정리" : "규칙 기반 정리 (API 키 없음)"}</div>
+      <div className="muted" style={{ fontSize: 12 }}>{draft.engine === "claude" ? "Claude 정리" : draft.fallback ? `규칙 기반 정리 (${draft.fallback})` : "규칙 기반 정리 (API 키 없음)"}</div>
     </div>
   );
 }

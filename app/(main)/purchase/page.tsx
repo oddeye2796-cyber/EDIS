@@ -34,13 +34,13 @@ export default async function PurchaseList({ searchParams }: { searchParams: Pro
           <tbody>
             {rows.map((r) => (
               <tr key={String(r.id)}>
-                <td>
+                <td className="nw">
                   <Link href={`/purchase/${r.id}`}>{String(r.po_no)}</Link>
                   {r.urgent ? <> <span className="badge bad">긴급</span></> : null}
                 </td>
                 <td>{String(r.supplier)}</td>
-                <td>{date(r.order_date)}</td>
-                <td>{date(r.due_date)} <DueBadge due={r.due_date} done={["received", "cancelled", "rejected"].includes(String(r.status))} /></td>
+                <td className="nw">{date(r.order_date)}</td>
+                <td className="nw">{date(r.due_date)} <DueBadge due={r.due_date} done={["received", "cancelled", "rejected"].includes(String(r.status))} /></td>
                 <td className="num">{won(r.total)}</td>
                 <td><StatusBadge kind="po" status={String(r.status)} /></td>
                 <td>{String(r.ecount_slip_no ?? "-")}</td>

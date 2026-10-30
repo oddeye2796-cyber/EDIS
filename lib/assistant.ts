@@ -1,5 +1,5 @@
 // 물어보기 챗봇. 매뉴얼·권한표 검색(RAG)과 업무 데이터 조회 도구를 씁니다.
-// ANTHROPIC_API_KEY 가 있으면 Claude가 도구를 골라 답하고, 없으면 규칙 기반으로 가장 가까운 답을 찾습니다.
+// ANTHROPIC_API_KEY 가 있으면 Claude가 도구를 골라 답하고, 없거나 API가 실패하면(크레딧 소진 등) 규칙 기반으로 가장 가까운 답을 찾습니다.
 // 볼 수 있는 범위: 영업은 자기 출하 지시만, 경영진·사무실·공장은 전체.
 import Anthropic from "@anthropic-ai/sdk";
 import { query } from "./db";
@@ -8,10 +8,11 @@ import { roleLabel } from "./auth";
 import { searchKb, type Chunk } from "./kb";
 import { stockFor } from "./stock";
 import { poStatus, soStatus } from "./labels";
+import { aiEnabled, aiFailed, aiPauseReason } from "./ai";
 
 export type ChatTurn = { role: "user" | "assistant"; content: string };
 export type Source = { title: string; href: string };
-export type Reply = { answer: string; sources: Source[]; engine: "claude" | "rules" };
+export type Reply = { answer: string; sources: Source[]; engine: "claude" | "rules"; notice?: string };
 
 const fmt = (n: unknown) => Number(n).toLocaleString("ko-KR", { maximumFractionDigits: 3 });
 const md = (d: unknown) => {
@@ -408,17 +409,19 @@ async function askRules(user: User, q: string, ctx: Ctx): Promise<string> {
 export async function ask(user: User, history: ChatTurn[]): Promise<Reply> {
   const ctx: Ctx = { user, sources: new Map() };
   const last = history.filter((t) => t.role === "user").at(-1)?.content ?? "";
-  if (process.env.ANTHROPIC_API_KEY) {
+  let fallback = aiPauseReason();
+  if (aiEnabled()) {
     try {
       const answer = await askClaude(user, history, ctx);
       return { answer, sources: [...ctx.sources.values()].slice(0, 4), engine: "claude" };
     } catch (e) {
-      console.error("assistant: claude failed, using rules", e);
+      fallback = aiFailed(e);
       ctx.sources.clear();
     }
   }
   const answer = await askRules(user, last, ctx);
-  return { answer, sources: [...ctx.sources.values()].slice(0, 4), engine: "rules" };
+  const notice = fallback ? `${fallback}로 지금은 간단 모드로 답했어요.` : undefined;
+  return { answer, sources: [...ctx.sources.values()].slice(0, 4), engine: "rules", notice };
 }
 
 export const suggestions: Record<User["role"], string[]> = {

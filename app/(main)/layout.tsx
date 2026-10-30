@@ -10,6 +10,7 @@ import ErrorBanner from "@/components/ErrorBanner";
 import { flagLate, visibleNotice } from "@/lib/alerts";
 import ChatWidget from "@/components/ChatWidget";
 import { suggestions } from "@/lib/assistant";
+import { aiEnabled } from "@/lib/ai";
 
 export const metadata: Metadata = { title: "휴럼 EDIS 수발주", description: "수발주 업무 자동화 데모" };
 export const viewport: Viewport = { width: "device-width", initialScale: 1 };
@@ -66,7 +67,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
               <Suspense><ErrorBanner /></Suspense>
               {children}
             </main>
-            <ChatWidget name={user.name} suggestions={suggestions[user.role]} llm={!!process.env.ANTHROPIC_API_KEY} />
+            <ChatWidget name={user.name} suggestions={suggestions[user.role]} llm={aiEnabled()} />
           </div>
         ) : (
           <main className="main">{children}</main>

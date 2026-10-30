@@ -25,7 +25,7 @@ export default async function EcountPage() {
           <tbody>
             {logs.map((l) => (
               <tr key={String(l.id)}>
-                <td>{dateTime(l.at)}</td>
+                <td className="nw">{dateTime(l.at)}</td>
                 <td>{l.doc_type === "po" ? "구매" : "판매"} · {String(l.doc_no)}</td>
                 <td>
                   <span className={`badge ${l.success ? "ok" : "bad"}`}>{l.success ? "성공" : "실패"}</span>

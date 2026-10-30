@@ -1,6 +1,7 @@
 // 주문 원문(카톡·문자·메일)을 발주/수주 초안으로 정리합니다.
 // ANTHROPIC_API_KEY 가 있으면 Claude가 정리하고, 없으면 간단한 규칙 기반으로 흉내만 냅니다.
 import Anthropic from "@anthropic-ai/sdk";
+import { aiEnabled, aiFailed, aiPauseReason } from "./ai";
 
 export type Partner = { id: number; name: string; type: string };
 export type Item = { id: number; code: string; name: string; unit: string; aliases?: string[] };
@@ -11,6 +12,7 @@ export const confLabel: Record<Conf, string> = { sure: "확실", guess: "추정"
 
 export type Draft = {
   engine: "claude" | "rules";
+  fallback?: string; // AI를 쓰려다 실패해 규칙 기반으로 정리한 이유 (크레딧 소진 등)
   direction: "purchase" | "sales" | "unknown";
   partner_id: number | null;
   partner_conf?: Conf;
@@ -64,7 +66,26 @@ export async function extractOrder(
   partners: Partner[],
   items: Item[],
 ): Promise<Draft> {
-  if (!process.env.ANTHROPIC_API_KEY) return extractByRules(rawText, hint, partners, items);
+  if (!aiEnabled()) {
+    const draft = extractByRules(rawText, hint, partners, items);
+    const paused = aiPauseReason();
+    return paused ? { ...draft, fallback: paused } : draft;
+  }
+  try {
+    return await extractByClaude(rawText, hint, partners, items);
+  } catch (e) {
+    // 크레딧 소진·키 오류·과부하 등 API 문제면 규칙 기반으로 정리합니다. 원문 문제(거절 등)는 그대로 알립니다.
+    if (!(e instanceof Anthropic.APIError)) throw e;
+    return { ...extractByRules(rawText, hint, partners, items), fallback: aiFailed(e) };
+  }
+}
+
+async function extractByClaude(
+  rawText: string,
+  hint: { direction?: string; partnerId?: number | null; receivedAt: Date },
+  partners: Partner[],
+  items: Item[],
+): Promise<Draft> {
 
   const client = new Anthropic();
   const today = hint.receivedAt.toISOString().slice(0, 10);

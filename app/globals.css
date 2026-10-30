@@ -16,6 +16,9 @@ body {
   background: var(--bg);
   color: var(--text);
   font-size: 14px;
+  /* 한글을 글자 중간에서 끊지 않고 띄어쓰기에서만 줄을 바꿉니다 (바이오/컬처처럼 이름이 갈라지지 않게). */
+  word-break: keep-all;
+  overflow-wrap: break-word;
 }
 a { color: var(--accent); text-decoration: none; }
 a:hover { text-decoration: underline; }
@@ -265,3 +268,7 @@ button.link { background: none; border: none; color: inherit; padding: 0 2px; cu
   .chat-fab { right: 12px; bottom: 12px; }
   .chat-panel { right: 0; bottom: 0; width: 100vw; max-width: 100vw; height: 85vh; border-radius: 12px 12px 0 0; }
 }
+
+/* 표 칸: 한 줄로 두는 칸(.nw)과 길면 말줄임하는 칸(.clip) */
+td.nw, th.nw { white-space: nowrap; }
+td.clip { max-width: 0; width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
