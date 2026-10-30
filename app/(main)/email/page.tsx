@@ -60,7 +60,7 @@ export default async function EmailPage({ searchParams }: { searchParams: Promis
           <tbody>
             {received.map((m) => (
               <tr key={String(m.id)}>
-                <td>{dateTime(m.received_at)}</td>
+                <td className="nw">{dateTime(m.received_at)}</td>
                 <td>{String(m.partner ?? "-")}<div className="muted">{String(m.email_from ?? "")}</div></td>
                 <td style={{ maxWidth: 420 }}>
                   {m.urgent ? <span className="badge bad" style={{ marginRight: 4 }}>긴급</span> : null}
@@ -82,7 +82,7 @@ export default async function EmailPage({ searchParams }: { searchParams: Promis
             {sent.map((s) => (
               <tr key={String(s.id)}>
                 <td>{s.sent_at ? dateTime(s.sent_at) : "-"}</td>
-                <td><Link href={`/purchase/${s.id}`}>{String(s.po_no)}</Link></td>
+                <td className="nw"><Link href={`/purchase/${s.id}`}>{String(s.po_no)}</Link></td>
                 <td>{String(s.supplier)}</td>
                 <td>{String(s.sent_to ?? "")}</td>
                 <td><StatusBadge kind="po" status={String(s.status)} /></td>

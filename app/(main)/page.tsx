@@ -139,9 +139,9 @@ export default async function Dashboard() {
               <tbody>
                 {todo.map((t) => (
                   <tr key={String(t.id)}>
-                    <td><Link href={`/purchase/${t.id}`}>{String(t.po_no)}</Link></td>
+                    <td className="nw"><Link href={`/purchase/${t.id}`}>{String(t.po_no)}</Link></td>
                     <td>{String(t.supplier)}</td>
-                    <td>{date(t.due_date)}</td>
+                    <td className="nw">{date(t.due_date)}</td>
                     <td><StatusBadge kind="po" status={String(t.status)} /></td>
                   </tr>
                 ))}
@@ -157,9 +157,9 @@ export default async function Dashboard() {
               {due.map((d) => (
                 <tr key={`${d.kind}${d.id}`}>
                   <td>{d.kind === "po" ? "발주" : "수주"}</td>
-                  <td><Link href={`/${d.kind === "po" ? "purchase" : "sales"}/${d.id}`}>{String(d.no)}</Link></td>
+                  <td className="nw"><Link href={`/${d.kind === "po" ? "purchase" : "sales"}/${d.id}`}>{String(d.no)}</Link></td>
                   <td>{String(d.partner)}</td>
-                  <td>{date(d.due_date)} <DueBadge due={d.due_date} done={false} /></td>
+                  <td className="nw">{date(d.due_date)} <DueBadge due={d.due_date} done={false} /></td>
                 </tr>
               ))}
               {due.length === 0 && <tr><td className="muted">3일 안에 납기인 건이 없습니다.</td></tr>}
@@ -173,9 +173,9 @@ export default async function Dashboard() {
               {inbox.map((i) => (
                 <tr key={String(i.id)}>
                   <td><span className="badge info">{channelLabel[String(i.channel)]}</span></td>
-                  <td>{String(i.partner ?? "-")}</td>
-                  <td className="muted">{String(i.raw_text).slice(0, 40)}</td>
-                  <td>{dateTime(i.received_at)}</td>
+                  <td className="nw">{String(i.partner ?? "-")}</td>
+                  <td className="muted clip" title={String(i.raw_text)}>{String(i.raw_text).replace(/\s+/g, " ")}</td>
+                  <td className="nw muted">{dateTime(i.received_at)}</td>
                 </tr>
               ))}
               {inbox.length === 0 && <tr><td className="muted">처리 전 주문이 없습니다.</td></tr>}

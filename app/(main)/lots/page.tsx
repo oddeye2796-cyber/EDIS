@@ -27,8 +27,8 @@ export default async function LotsPage() {
                   <td>{itemCategory[String(l.category)]}</td>
                   <td>{String(l.lot_no)}</td>
                   <td className="num">{qty(l.qty)} {String(l.unit)}</td>
-                  <td>{date(l.mfg_date)}</td>
-                  <td>{date(l.expiry_date)} {badge}</td>
+                  <td className="nw">{date(l.mfg_date)}</td>
+                  <td className="nw">{date(l.expiry_date)} {badge}</td>
                   <td>{String(l.coa_note ?? "-")}</td>
                   <td>{l.po_id ? <a href={`/purchase/${l.po_id}`}>{String(l.po_no)}</a> : "-"}</td>
                 </tr>

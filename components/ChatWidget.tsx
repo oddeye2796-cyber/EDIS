@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 
 // 모든 화면 오른쪽 아래의 물어보기 창. 대화는 이 탭에서만 기억합니다.
-type Msg = { role: "user" | "assistant"; content: string; sources?: { title: string; href: string }[] };
+type Msg = { role: "user" | "assistant"; content: string; sources?: { title: string; href: string }[]; notice?: string };
 
 // **굵게** 와 줄바꿈만 그려 줍니다.
 function Text({ s }: { s: string }) {
@@ -50,7 +50,7 @@ export default function ChatWidget({ name, suggestions, llm }: { name: string; s
         body: JSON.stringify({ messages: next.map(({ role, content }) => ({ role, content })) }),
       });
       const data = await res.json();
-      setMsgs([...next, data.error ? { role: "assistant", content: data.error } : { role: "assistant", content: data.answer, sources: data.sources }]);
+      setMsgs([...next, data.error ? { role: "assistant", content: data.error } : { role: "assistant", content: data.answer, sources: data.sources, notice: data.notice }]);
     } catch {
       setMsgs([...next, { role: "assistant", content: "연결이 끊겼어요. 잠시 후 다시 물어봐 주세요." }]);
     } finally {
@@ -92,6 +92,7 @@ export default function ChatWidget({ name, suggestions, llm }: { name: string; s
         {msgs.map((m, i) => (
           <div key={i} className={`chat-msg ${m.role}`}>
             <Text s={m.content} />
+            {m.notice && <div className="muted" style={{ fontSize: 11, marginTop: 4 }}>{m.notice}</div>}
             {m.sources && m.sources.length > 0 && (
               <div className="chat-sources">
                 {m.sources.map((s) => (

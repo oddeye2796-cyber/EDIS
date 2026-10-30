@@ -168,7 +168,7 @@ export default async function PODetail({ params }: { params: Promise<{ id: strin
               {lots.map((l) => (
                 <tr key={String(l.id)}>
                   <td>{String(l.name)}</td><td>{String(l.lot_no)}</td><td className="num">{qty(l.qty)}</td>
-                  <td>{date(l.mfg_date)}</td><td>{date(l.expiry_date)}</td><td>{String(l.coa_note ?? "-")}</td>
+                  <td className="nw">{date(l.mfg_date)}</td><td className="nw">{date(l.expiry_date)}</td><td>{String(l.coa_note ?? "-")}</td>
                 </tr>
               ))}
             </tbody>

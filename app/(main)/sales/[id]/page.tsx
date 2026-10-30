@@ -131,7 +131,7 @@ export default async function SODetail({ params }: { params: Promise<{ id: strin
                 <tr key={String(c.id)}>
                   <td><a href={`/sales/${c.id}`}>{String(c.so_no)}</a></td>
                   <td>{String(c.summary ?? "")}</td>
-                  <td>{date(c.due_date)}</td>
+                  <td className="nw">{date(c.due_date)}</td>
                   <td><StatusBadge kind="so" status={String(c.status)} /></td>
                 </tr>
               ))}
