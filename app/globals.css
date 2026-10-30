@@ -272,3 +272,9 @@ button.link { background: none; border: none; color: inherit; padding: 0 2px; cu
 /* 표 칸: 한 줄로 두는 칸(.nw)과 길면 말줄임하는 칸(.clip) */
 td.nw, th.nw { white-space: nowrap; }
 td.clip { max-width: 0; width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* 음성 입력 */
+.voice-live { margin-top: 8px; padding: 8px 10px; border-radius: 8px; background: #fff5f5; color: var(--bad); font-size: 14px; }
+.voice-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--bad); margin-right: 4px; animation: voice-blink 1s infinite; }
+@keyframes voice-blink { 50% { opacity: .2; } }
+.voice-error { margin-top: 6px; font-size: 13px; color: var(--bad); }
