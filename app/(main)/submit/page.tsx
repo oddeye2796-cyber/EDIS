@@ -8,6 +8,7 @@ import { channelLabel, dateTime } from "@/lib/labels";
 import { draftInbox } from "@/lib/inbox";
 import type { Draft } from "@/lib/extract";
 import FlowSteps from "@/components/FlowSteps";
+import VoiceTextarea from "@/components/VoiceTextarea";
 import ShipForm from "@/components/ShipForm";
 import { inboxFlow, poFlow, soFlow } from "@/lib/flow";
 import { contractRemaining } from "@/lib/stock";
@@ -238,14 +239,11 @@ export default async function SubmitPage({
 
       <form action={submitOrder} className="panel">
         <label>받은 메시지</label>
-        <textarea name="raw_text" placeholder="여기에 길게 눌러 붙여넣기" style={{ minHeight: 140, fontSize: 16 }} />
+        <VoiceTextarea name="raw_text" placeholder="여기에 길게 눌러 붙여넣기, 또는 아래 버튼으로 말하기" />
 
         <label style={{ marginTop: 12 }}>캡처 사진 (선택)</label>
         <input type="file" name="image" accept="image/*" />
         <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>손글씨 주문서 사진 자동 읽기는 AI 키를 연결하면 켜집니다.</div>
-        <button type="button" className="secondary block" disabled style={{ marginTop: 8, opacity: 0.6 }}>
-          음성으로 주문 남기기 (준비 중, AI 키 연결 후 사용)
-        </button>
 
         <label style={{ marginTop: 12 }}>어디서 받았나요?</label>
         <div className="chips">
